@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  /* Colors — "Marketplace Utility Core" */
+  --color-primary: #131921;
+  --color-on-primary: #ffffff;
+  --color-accent: #ff9900;
+  --color-accent-hover: #ffb86f;
+  --color-on-accent: #111111;
+  --color-surface: #ffffff;
+  --color-canvas: #f3f3f3;
+  --color-surface-muted: #eeeeee;
+  --color-text-main: #111111;
+  --color-text-muted: #565959;
+  --color-border: #c5c6cb;
+  --color-link: #007185;
+  --color-success: #067d62;
+  --color-error: #ba1a1a;
+
+  /* Typography */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --text-display-lg: 2rem;
+  --text-display-lg--line-height: 2.5rem;
+  --text-display-lg--font-weight: 700;
+  --text-display-lg--letter-spacing: -0.02em;
+
+  --text-headline-md: 1.25rem;
+  --text-headline-md--line-height: 1.75rem;
+  --text-headline-md--font-weight: 700;
+
+  --text-title-lg: 1.125rem;
+  --text-title-lg--line-height: 1.5rem;
+  --text-title-lg--font-weight: 600;
+
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.5rem;
+
+  --text-body-md: 0.875rem;
+  --text-body-md--line-height: 1.25rem;
+
+  --text-body-sm: 0.75rem;
+  --text-body-sm--line-height: 1rem;
+
+  --text-label-md: 0.8125rem;
+  --text-label-md--line-height: 1.125rem;
+  --text-label-md--font-weight: 600;
+  --text-label-md--letter-spacing: 0.01em;
+
+  --text-label-sm: 0.6875rem;
+  --text-label-sm--line-height: 0.875rem;
+  --text-label-sm--font-weight: 700;
+
+  /* Spacing — 8px base grid */
+  --spacing-base: 8px;
+  --spacing-gutter: 16px;
+  --spacing-margin-mobile: 16px;
+  --spacing-margin-desktop: 24px;
+  --spacing-touch: 44px;
+
+  /* Layout */
+  --container-page: 1440px;
+
+  /* Radii */
+  --radius-sm: 0.125rem;
+  --radius-DEFAULT: 0.25rem;
+  --radius-lg: 0.5rem;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-text-main);
+}
+
+/* Safe-area helpers for sticky/fixed regions on notched devices */
+@utility safe-px {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+@utility safe-pb {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
