@@ -1,0 +1,103 @@
+---
+description: Create a feature spec file and branch from a short idea
+argument-hint: Short feature description
+allowed-tools: Read, Write, Glob, Bash(git switch:*)
+---
+
+You are helping to spin up a new feature spec for this application, from a short idea provided in the user input below. 
+Always adhere to any rules or regurements set out in any claude ma Tiles when responding.
+
+
+User input: $ARGUMENTS
+
+## High level behavior
+Your job will be to turn the user input above into:
+
+- A human friendly feature title in kebab-case (e.g. new-heist-form)
+- A safe git branch name not already taken (e.g. claude/feature/new-heist-form)
+- A detailed markdown spec file under the _specs/ directory
+
+Then save the spec file to disk and print a short summary of what you did.
+
+## Step 1. Check the current branch
+Run 'git status' and check the current Git branch, and abort this entire process if there are any uncommitted,
+unstaged, or untracked files in the working directory. 
+Tell the user to commit or stash changes before proceeding, and DO NOT GO ANY FURTHER.
+
+## Step 2. Parse the arguments
+
+From '$ARGUMENTS', extract:
+
+1. 'feature_title'
+    - A short, human readable title in Title Case.
+    - Example: "Card Component for Dashboard Stats".
+
+2. 'feature_slug"
+    - A git safe slug,
+    - Rules:
+        - Lowercase
+        - Kebab-case
+        - Only 'a-z', '0-9' and '-'
+        - Replace spaces and punctuation with '-'
+        - Collapse multiple '-' into one
+        - Trim '-' from start and end
+        - Maximum length 40 characters
+    - Example: 'card-component' or 'card-component-dashboard',
+
+    
+
+3. 'branch_name*
+    - Format: 'claude/feature/<feature_slug>*
+    - Example: *claude/feature/card-component*'
+
+If you cannot infer a sensible 'feature_title' and 'feature_slug', ask the user to clarify instead of guessing.
+
+## Step 3. Switch to a new Git branch
+
+Before making any content, switch to a new Git branch using the 'branch_name' derived from the ARGUMENTS• 
+
+If the branch name is already taken, then append a version number to it:
+e.g. 'claude/feature/card-component-01'
+
+
+## Step 4 - Rpsearch the codebase
+Read these files and folders before writing the spec:
+- CLAUDE.md - roadmap, conventions, schema
+- app and components folders - routes and structures
+- All files in .claude/specs/ - avoid duplicating existing specs
+Check CLAUDE.md to confirm the requested step is not already
+marked complete. If it is, warn the user and stop.
+
+## Step 5. Draft the spec content
+
+Create a markdown spec document that Plan mode can use directly and save it in the specs folder using the 'feature_slug'. 
+Use the exact structure as defined in the spec template file here: @specs/template.md.
+Do not add technical implementation details such as code examples.
+
+## Step 6. Final output to the user
+After the file is saved, respond to the user with a short summary in this exact format:
+
+Branch: <branch_name>
+Spec file: specs/<feature_slug>.md
+Title: <feature_title>
+
+## Step 7 - Save the spec Save to: •claude/specs/
+<steil_number>-<feature_slug>.md
+
+## Step 8 - Report to the user
+Print a short summary in this exact format:
+Spec file: .claude/specs/<step_number>-<feature_slug>.md
+Title: <feature_title>
+Then tell the user:
+"Review the spec at .claude/specs/<step_number>-<feature_slug>.md
+then enter Plan Mode with Shift+Tab twice to begin implementation."
+
+Do not repeat the full spec in the chat output unless the user explicitly asks to see it. The main goal is to save the spec file and report
+where it lives and what branch name to use.
+
+
+
+
+
+
+
