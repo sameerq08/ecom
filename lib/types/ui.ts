@@ -3,7 +3,7 @@
  *
  * TEMPORARY: these describe what components render, not the database schema.
  * They will be replaced by Supabase-generated types once the backend is wired up.
- * Keep them consistent with `specs/entity-architecture.md`.
+ * Keep them consistent with `.claude/specs/entity-architecture.md`.
  */
 
 export type OrderStatus = "pending" | "confirmed" | "shipped" | "delivered";
@@ -22,14 +22,50 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   delivered: "Delivered",
 };
 
+export type Category = {
+  slug: string;
+  name: string;
+};
+
+export type SellerSignal = {
+  id: string;
+  storeName: string;
+  memberSince: string;
+  listingCount: number;
+};
+
 export type Product = {
   id: string;
   name: string;
   price: number;
   rating: number;
-  imageUrl: string;
+  /** Null when the listing has no image — render the placeholder well. */
+  imageUrl: string | null;
   sellerName: string;
   inStock: boolean;
+};
+
+/**
+ * Everything the detail screen needs, on top of the card-level `Product`.
+ * `images` is ordered; an empty array means "no imagery at all".
+ */
+export type ProductDetail = Product & {
+  description: string;
+  images: readonly string[];
+  stockQty: number;
+  categorySlug: string;
+  seller: SellerSignal;
+};
+
+/** Parsed, validated `/search` query string. */
+export type ProductFilters = {
+  q?: string;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  rating?: number;
+  seller?: string;
+  inStock?: boolean;
 };
 
 export type CartLine = {

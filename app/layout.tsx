@@ -9,7 +9,8 @@ const inter = Inter({
 });
 
 const navLinks = [
-  { href: "/shop", label: "Shop" },
+  { href: "/", label: "Shop" },
+  { href: "/search", label: "Search" },
   { href: "/cart", label: "Cart" },
   { href: "/orders", label: "Orders" },
   { href: "/seller", label: "Seller" },
