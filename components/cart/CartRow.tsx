@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { ProductImage } from "@/components/product/ProductImage";
 import { formatPrice, type CartLine } from "@/lib/types/ui";
 import { QuantityStepper } from "./QuantityStepper";
 
@@ -8,12 +8,11 @@ export function CartRow({ line }: { line: CartLine }) {
   return (
     <div className="flex flex-col gap-4 border-b border-border py-4 sm:flex-row">
       <div className="relative h-48 w-full flex-shrink-0 overflow-hidden rounded bg-surface-muted sm:h-32 sm:w-48">
-        <Image
+        <ProductImage
           src={product.imageUrl}
           alt={product.name}
-          fill
           sizes="(max-width: 640px) 100vw, 192px"
-          className="object-contain p-2"
+          padding="p-2"
         />
       </div>
 

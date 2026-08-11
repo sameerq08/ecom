@@ -4,7 +4,7 @@ branch: claude/feature/<feature-name>
 
 ## Overview
 One paragraph describing what this feature does and why
-it exists at this stage of the Spendly roadmap.
+it exists at this stage of the Ecom.
 ## Depends on
 Which previous steps this feature requires to be complete.
 ## Routes
