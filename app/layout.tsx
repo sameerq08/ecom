@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
+import { getCartCount } from "@/lib/data/cart";
 import "./globals.css";
 
 const inter = Inter({
@@ -14,6 +15,8 @@ const navLinks = [
   { href: "/cart", label: "Cart" },
   { href: "/orders", label: "Orders" },
   { href: "/seller", label: "Seller" },
+  { href: "/seller/products", label: "Listings" },
+  { href: "/seller/orders", label: "Sales" },
 ];
 
 export const metadata: Metadata = {
@@ -21,7 +24,11 @@ export const metadata: Metadata = {
   description: "Ecommerce marketplace",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Server Actions revalidate the layout, which is what keeps this badge in
+  // step with the cart rather than going stale after a quantity change.
+  const cartCount = await getCartCount();
+
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
@@ -30,14 +37,23 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/" className="text-title-lg font-bold">
               Marketplace
             </Link>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               {navLinks.map(({ href, label }) => (
                 <Link
                   key={href}
                   href={href}
-                  className="flex h-touch items-center rounded px-3 text-body-md hover:bg-white/10"
+                  className="flex h-touch items-center gap-2 rounded px-3 text-body-md hover:bg-white/10"
                 >
                   {label}
+                  {href === "/cart" && cartCount > 0 ? (
+                    <span
+                      aria-label={`${cartCount} items in cart`}
+                      // Not amber: the badge is a count, not a conversion CTA.
+                      className="inline-flex min-w-5 items-center justify-center rounded-full bg-surface px-1.5 text-label-sm text-primary"
+                    >
+                      {cartCount}
+                    </span>
+                  ) : null}
                 </Link>
               ))}
             </div>

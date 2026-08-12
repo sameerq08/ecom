@@ -1,66 +1,88 @@
+import Link from "next/link";
 import { OrderTable } from "@/components/seller/OrderTable";
+import { SellerStatCard } from "@/components/seller/SellerStatCard";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Button } from "@/components/ui/Button";
-import type { SellerOrderRow } from "@/lib/types/ui";
+import { getSellerOrderItems, getSellerStats } from "@/lib/data/seller";
 
-// PLACEHOLDER DATA — replaced by Supabase queries in a later step.
-const sampleOrders: SellerOrderRow[] = [
-  {
-    id: "s1",
-    orderNumber: "#MH-9021",
-    placedAt: "Oct 24, 10:42 AM",
-    customerName: "Jane Doe",
-    amount: 299,
-    status: "shipped",
-  },
-  {
-    id: "s2",
-    orderNumber: "#MH-9018",
-    placedAt: "Oct 24, 09:15 AM",
-    customerName: "Sam Patel",
-    amount: 49.99,
-    status: "pending",
-  },
-  {
-    id: "s3",
-    orderNumber: "#MH-9004",
-    placedAt: "Oct 23, 04:02 PM",
-    customerName: "Alex Kim",
-    amount: 129.5,
-    status: "delivered",
-  },
-];
+export default async function SellerPage() {
+  const [stats, orderItems] = await Promise.all([
+    getSellerStats(),
+    getSellerOrderItems(),
+  ]);
 
-export default function SellerPage() {
+  const recent = orderItems.slice(0, 5);
+
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-display-lg">Seller</h1>
+      <h1 className="text-display-lg text-text-main">Seller</h1>
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <SellerStatCard
+          label="Active listings"
+          value={stats.activeListings}
+          hint="Live in the public catalog"
+        />
+        <SellerStatCard
+          label="Orders needing action"
+          value={stats.ordersNeedingAction}
+          hint="Not yet marked delivered"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-4">
+        <Link
+          href="/seller/products"
+          className="inline-flex h-touch items-center justify-center rounded border border-border bg-surface px-4 text-body-md font-bold text-text-main transition-colors hover:bg-surface-muted"
+        >
+          Manage listings
+        </Link>
+        <Link
+          href="/seller/orders"
+          className="inline-flex h-touch items-center justify-center rounded border border-border bg-surface px-4 text-body-md font-bold text-text-main transition-colors hover:bg-surface-muted"
+        >
+          Incoming orders
+        </Link>
+      </div>
 
       <Card className="overflow-hidden">
         <CardHeader
           title="Recent Orders"
           action={
-            <button
-              type="button"
-              className="text-label-md text-link hover:underline"
+            <Link
+              href="/seller/orders"
+              className="flex h-touch items-center text-label-md text-link hover:underline"
             >
               View All
-            </button>
+            </Link>
           }
         />
-        <OrderTable orders={sampleOrders} />
+        {recent.length === 0 ? (
+          <div className="p-5">
+            <p className="text-body-md text-text-muted">
+              No orders have come in for your listings yet.
+            </p>
+          </div>
+        ) : (
+          <OrderTable orders={recent} />
+        )}
       </Card>
 
-      <section className="flex flex-col gap-4">
-        <h2 className="text-headline-md">Empty state</h2>
+      {stats.activeListings === 0 ? (
         <EmptyState
-          icon={<span className="text-4xl">📦</span>}
+          icon={<span className="text-display-lg">📦</span>}
           title="No products yet"
           description="Add your first listing to start selling on the marketplace."
-          actions={<Button fullWidth>Add product</Button>}
+          actions={
+            <Link
+              href="/seller/products"
+              className="inline-flex h-touch w-full items-center justify-center rounded border border-border bg-surface px-4 text-body-md font-bold text-text-main transition-colors hover:bg-surface-muted"
+            >
+              Manage listings
+            </Link>
+          }
         />
-      </section>
+      ) : null}
     </div>
   );
 }

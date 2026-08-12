@@ -1,7 +1,9 @@
+import { getCategoryBySlug } from "@/lib/data/categories";
 import type {
   Product,
   ProductDetail,
   ProductFilters,
+  SellerListingRow,
   SellerSignal,
 } from "@/lib/types/ui";
 
@@ -33,7 +35,12 @@ type SeedProduct = {
   categorySlug: string;
   stockQty: number;
   featured: boolean;
+  /** Mirrors `Product.is_active`: false hides the listing from every public read. */
+  active: boolean;
 };
+
+/** The seller whose dashboard `/seller/*` renders, standing in for a session. */
+export const CURRENT_SELLER_ID = "homesafe" satisfies keyof typeof SELLERS;
 
 const SEED: readonly SeedProduct[] = [
   {
@@ -48,6 +55,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "electronics",
     stockQty: 24,
     featured: true,
+    active: true,
   },
   {
     id: "curved-ultrawide-gaming-monitor",
@@ -61,6 +69,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "electronics",
     stockQty: 8,
     featured: true,
+    active: true,
   },
   {
     id: "mechanical-keyboard-hot-swappable",
@@ -74,6 +83,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "electronics",
     stockQty: 0,
     featured: true,
+    active: true,
   },
   {
     id: "smart-indoor-security-camera",
@@ -87,6 +97,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "electronics",
     stockQty: 61,
     featured: true,
+    active: true,
   },
   {
     id: "pour-over-coffee-kettle",
@@ -100,6 +111,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "home-kitchen",
     stockQty: 15,
     featured: true,
+    active: true,
   },
   {
     id: "cast-iron-skillet-12-inch",
@@ -113,6 +125,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "home-kitchen",
     stockQty: 42,
     featured: false,
+    active: true,
   },
   {
     id: "linen-blend-oxford-shirt",
@@ -126,6 +139,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "clothing-accessories",
     stockQty: 30,
     featured: true,
+    active: true,
   },
   {
     id: "merino-wool-crew-socks",
@@ -139,6 +153,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "clothing-accessories",
     stockQty: 0,
     featured: false,
+    active: true,
   },
   {
     id: "the-pragmatic-shelf-hardback",
@@ -152,6 +167,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "books",
     stockQty: 12,
     featured: true,
+    active: true,
   },
   {
     id: "field-notes-pocket-atlas",
@@ -165,6 +181,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "books",
     stockQty: 5,
     featured: false,
+    active: true,
   },
   {
     id: "insulated-trail-water-bottle",
@@ -178,6 +195,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "sports-outdoors",
     stockQty: 88,
     featured: true,
+    active: true,
   },
   {
     id: "adjustable-resistance-band-set",
@@ -191,6 +209,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "sports-outdoors",
     stockQty: 19,
     featured: false,
+    active: true,
   },
   {
     id: "hardwood-building-blocks",
@@ -204,6 +223,7 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "toys-games",
     stockQty: 27,
     featured: true,
+    active: true,
   },
   {
     id: "vitamin-c-daily-serum",
@@ -217,6 +237,49 @@ const SEED: readonly SeedProduct[] = [
     categorySlug: "beauty-personal-care",
     stockQty: 53,
     featured: false,
+    active: true,
+  },
+  {
+    id: "ceramic-dinner-plate-set",
+    name: "Stoneware Dinner Plate Set, Service for Four",
+    description:
+      "Reactive-glazed stoneware fired at high temperature, so no two plates share a pattern. Dishwasher and microwave safe.",
+    price: 68,
+    rating: 4.4,
+    images: ["/vercel.svg"],
+    sellerId: "homesafe",
+    categorySlug: "home-kitchen",
+    stockQty: 21,
+    featured: false,
+    active: true,
+  },
+  {
+    id: "smart-video-doorbell",
+    name: "Smart Video Doorbell with Two-Way Talk",
+    description:
+      "Answer the door from anywhere. Wide-angle 1080p lens, package detection, and wired or battery installation.",
+    price: 89.99,
+    rating: 4.1,
+    images: ["/next.svg", "/window.svg"],
+    sellerId: "homesafe",
+    categorySlug: "electronics",
+    stockQty: 0,
+    featured: false,
+    active: true,
+  },
+  {
+    id: "motion-sensor-night-light",
+    name: "Motion Sensor Night Light, Two Pack",
+    description:
+      "Warm LED strips that wake on movement and fade out after thirty seconds. Magnetic mount, rechargeable over USB-C.",
+    price: 19.5,
+    rating: 3.7,
+    images: ["/globe.svg"],
+    sellerId: "homesafe",
+    categorySlug: "home-kitchen",
+    stockQty: 34,
+    featured: false,
+    active: false,
   },
 ];
 
@@ -225,7 +288,7 @@ const SEED: readonly SeedProduct[] = [
  * would never paint. A short development-only delay makes the skeleton states
  * observable while building. Production builds resolve immediately.
  */
-async function simulateLatency(): Promise<void> {
+export async function simulateLatency(): Promise<void> {
   if (process.env.NODE_ENV !== "development") return;
   await new Promise((resolve) => setTimeout(resolve, 600));
 }
@@ -245,7 +308,7 @@ function toProduct(seed: SeedProduct): Product {
 function toSellerSignal(sellerId: SeedProduct["sellerId"]): SellerSignal {
   return {
     ...SELLERS[sellerId],
-    listingCount: SEED.filter((seed) => seed.sellerId === sellerId).length,
+    listingCount: countActiveListings(sellerId),
   };
 }
 
@@ -262,15 +325,44 @@ function toDetail(seed: SeedProduct): ProductDetail {
 
 export async function getFeaturedProducts(): Promise<Product[]> {
   await simulateLatency();
-  return SEED.filter((seed) => seed.featured).map(toProduct);
+  return SEED.filter((seed) => seed.active && seed.featured).map(toProduct);
 }
 
 export async function getProductById(
   id: string,
 ): Promise<ProductDetail | null> {
   await simulateLatency();
+  const seed = SEED.find((candidate) => candidate.active && candidate.id === id);
+  return seed ? toDetail(seed) : null;
+}
+
+/**
+ * Synchronous lookup used only by the other `lib/data/*` modules to hydrate a
+ * stored product id into renderable fields. Unlike `getProductById` it skips
+ * the latency simulation and ignores `active`, because a cart line or a placed
+ * order must still render after its listing is deactivated.
+ */
+export function findProduct(id: string): ProductDetail | null {
   const seed = SEED.find((candidate) => candidate.id === id);
   return seed ? toDetail(seed) : null;
+}
+
+/** A seller's own listings, including inactive ones — this is the owner's view. */
+export async function getSellerListings(
+  sellerId: string,
+): Promise<SellerListingRow[]> {
+  await simulateLatency();
+  return SEED.filter((seed) => seed.sellerId === sellerId).map((seed) => ({
+    product: toProduct(seed),
+    categoryName: getCategoryBySlug(seed.categorySlug)?.name ?? seed.categorySlug,
+    stockQty: seed.stockQty,
+    active: seed.active,
+  }));
+}
+
+/** Count of a seller's live listings, for the dashboard stat tiles. */
+export function countActiveListings(sellerId: string): number {
+  return SEED.filter((seed) => seed.sellerId === sellerId && seed.active).length;
 }
 
 /** Store names for the seller filter dropdown, alphabetised. */
@@ -322,6 +414,9 @@ export async function searchProducts(
   const keyword = filters.q?.trim().toLowerCase();
 
   return SEED.filter((seed) => {
+    if (!seed.active) {
+      return false;
+    }
     if (
       keyword &&
       !seed.name.toLowerCase().includes(keyword) &&

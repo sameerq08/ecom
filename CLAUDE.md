@@ -10,11 +10,23 @@ Intended stack: Next.js 16 (App Router, React 19, TypeScript) + Tailwind v4 + Su
 
 ## Current state — read this first
 
-**The backend does not exist yet.** The repo is a static UI scaffold. There is no `supabase` dependency, no `lib/supabase/`, no `supabase/migrations/`, no `.env*` files, and no auth. Every route renders hardcoded placeholder data defined inline in the page file (see the `// PLACEHOLDER DATA` comment in `app/shop/page.tsx`).
+**The backend does not exist yet.** There is no `supabase` dependency, no `lib/supabase/`, no `supabase/migrations/`, no `.env*` files, no auth, and no payment processing. Every screen is driven by local seed data in `lib/data/`.
 
-Routes that exist: `/` (nav stub), `/shop`, `/cart`, `/orders`, `/seller`. The routes the specs call for — `/search`, `/products/[id]`, `/sellers/[id]`, `/checkout`, `/orders/[id]`, `/seller/products`, `/seller/orders` — are **not built**.
+Routes that exist: `/`, `/search`, `/products/[id]`, `/cart`, `/checkout`, `/orders`, `/orders/[id]`, `/seller`, `/seller/products`, `/seller/orders`. Only `/sellers/[id]` (the public seller profile) from `.claude/specs/visual-architecture.md` is still unbuilt.
 
-`lib/types/ui.ts` holds temporary presentational view-models (`Product`, `CartLine`, `OrderSummary`, `SellerOrderRow`, `OrderStatus`) plus `formatPrice`. These are *not* database types; they get replaced by Supabase-generated types when the backend lands.
+Steps completed: `01-product-browsing-and-detail` (catalog), `02-order-cart-and-checkout` (cart, checkout, orders, seller dashboard).
+
+**`lib/data/` is the only data-access seam.** Screens call its exported helpers, never a raw array — swapping in Supabase should touch these four files and nothing else:
+
+- `products.ts` — the seed catalog. `active: false` hides a listing from every public read; `findProduct` is the synchronous, `active`-ignoring lookup the other data modules hydrate through, and is not for use outside `lib/data/`.
+- `cart.ts`, `orders.ts` — **mutable module-level state**. It survives navigation but resets when the server process restarts. Both call `connection()` from `next/server` before reading, which keeps the mutable reads out of the prerender pass; without it every screen would be baked at build time and frozen on the seed. This is why every route reports as dynamic (`ƒ`) in `next build`.
+- `seller.ts` — derives the seller's view from the other two. `CURRENT_SELLER_ID` stands in for the session; replacing it is the whole seller-side auth swap.
+
+Mutations go through Server Actions (`app/cart/actions.ts`, `app/checkout/actions.ts`, `app/seller/orders/actions.ts`), each ending in `revalidatePath("/", "layout")` — layout scope, because the header's cart badge would otherwise go stale. Every control is a plain `<form action={...}>`, so **nothing in the repo is a client component** except `app/error.tsx`, which the framework requires, and all interaction works with JavaScript disabled.
+
+Order status lives on the order, not on its line items, per the RLS note in `.claude/specs/entity-architecture.md`. That is why a seller advancing a status on `/seller/orders` changes what the buyer sees on `/orders/[id]`.
+
+`lib/types/ui.ts` holds temporary presentational view-models (`Product`, `CartLine`, `OrderDetail`, `SellerListingRow`, `OrderStatus`, …) plus `formatPrice`. These are *not* database types; they get replaced by Supabase-generated types when the backend lands.
 
 ## Commands
 
