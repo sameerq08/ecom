@@ -16,13 +16,16 @@ Routes that exist: `/`, `/search`, `/products/[id]`, `/cart`, `/checkout`, `/ord
 
 Steps completed: `01-product-browsing-and-detail` (catalog), `02-order-cart-and-checkout` (cart, checkout, orders, seller dashboard).
 
-**`lib/data/` is the only data-access seam.** Screens call its exported helpers, never a raw array — swapping in Supabase should touch these four files and nothing else:
+**`lib/data/` is the only data-access seam.** Screens call its exported helpers, never a raw array — swapping in Supabase should touch these five files and nothing else:
 
-- `products.ts` — the seed catalog. `active: false` hides a listing from every public read; `findProduct` is the synchronous, `active`-ignoring lookup the other data modules hydrate through, and is not for use outside `lib/data/`.
-- `cart.ts`, `orders.ts` — **mutable module-level state**. It survives navigation but resets when the server process restarts. Both call `connection()` from `next/server` before reading, which keeps the mutable reads out of the prerender pass; without it every screen would be baked at build time and frozen on the seed. This is why every route reports as dynamic (`ƒ`) in `next build`.
-- `seller.ts` — derives the seller's view from the other two. `CURRENT_SELLER_ID` stands in for the session; replacing it is the whole seller-side auth swap.
+- `products.ts` — the seed catalog, plus the `SELLERS` map. `active: false` hides a listing from every public read; `findProduct` is the synchronous, `active`-ignoring lookup the other data modules hydrate through, and is not for use outside `lib/data/`. Also exports `CURRENT_SELLER_ID` (`"homesafe"`), which stands in for the seller session — replacing it is the whole seller-side auth swap.
+- `cart.ts`, `orders.ts` — **mutable module-level state**. It survives navigation but resets when the server process restarts. Their async reads call `connection()` from `next/server` first, which keeps the mutable reads out of the prerender pass; without it every screen would be baked at build time and frozen on the seed. This is why every route reports as dynamic (`ƒ`) in `next build`.
+- `seller.ts` — derives the seller's view from the other two and stores nothing of its own, so a listing or status can never disagree between buyer and seller screens.
+- `categories.ts` — the fixed v1 category set (`CATEGORIES`, `getCategoryBySlug`). Admin-seeded, no management UI.
 
-Mutations go through Server Actions (`app/cart/actions.ts`, `app/checkout/actions.ts`, `app/seller/orders/actions.ts`), each ending in `revalidatePath("/", "layout")` — layout scope, because the header's cart badge would otherwise go stale. Every control is a plain `<form action={...}>`, so **nothing in the repo is a client component** except `app/error.tsx`, which the framework requires, and all interaction works with JavaScript disabled.
+Seed reads are synchronous, so nothing would suspend and `loading.tsx` would never paint. `simulateLatency()` in `products.ts` inserts a 600ms delay **in development only** to make the skeletons observable; production resolves immediately. It disappears with the seed layer.
+
+Mutations go through Server Actions (`app/cart/actions.ts`, `app/checkout/actions.ts`, `app/seller/orders/actions.ts`), each ending in `revalidatePath("/", "layout")` — layout scope, because the header's cart badge would otherwise go stale. Header, nav, and footer are written inline in `app/layout.tsx`; there is no `components/layout/`. Every control is a plain `<form action={...}>`, so **nothing in the repo is a client component** except `app/error.tsx`, which the framework requires, and all interaction works with JavaScript disabled.
 
 Order status lives on the order, not on its line items, per the RLS note in `.claude/specs/entity-architecture.md`. That is why a seller advancing a status on `/seller/orders` changes what the buyer sees on `/orders/[id]`.
 
@@ -72,7 +75,7 @@ The `node_modules/next/dist/docs/` guides are authoritative over training data �
 Consequences for writing markup:
 
 - Use **semantic token classes**, not raw Tailwind palette: `bg-canvas`, `bg-surface`, `text-text-muted`, `border-border`, `text-link`, `text-success`, `text-error`. There is no `bg-gray-100` in this design system.
-- Use the **custom type scale**, not Tailwind's: `text-display-lg`, `text-headline-md`, `text-title-lg`, `text-body-lg/md/sm`, `text-label-md/sm`. Each token bakes in its own weight and line-height. `app/page.tsx` still uses stock `text-2xl`/`text-sm` — that's the un-migrated stub, not the pattern to copy.
+- Use the **custom type scale**, not Tailwind's: `text-display-lg`, `text-headline-md`, `text-title-lg`, `text-body-lg/md/sm`, `text-label-md/sm`. Each token bakes in its own weight and line-height, so do not pair them with `font-*` or `leading-*` utilities.
 - `bg-accent` (amber `#ff9900`) is **reserved for conversion CTAs only** (Add to Cart, Place Order). Never for body text or decorative fill.
 - Design is **light-mode only**. No dark palette exists; do not add `dark:` variants.
 - Every interactive element needs a ≥44px hit area — use `h-touch` / `w-touch`. `Button` already does.
@@ -93,7 +96,9 @@ Loading states use **skeletons shaped like the real content** (`ProductCardSkele
 
 ## When the backend is added
 
-These rules are not yet exercised by any code, but hold for the Supabase work:
+A Supabase MCP server is wired up in `.mcp.json` (project `xzurhfeetpwthaswutnc`), so schema and log inspection go through the `mcp__supabase__*` tools — `list_tables` before any schema change, `apply_migration` (not `execute_sql`) for DDL, `get_advisors` after. Note that this points at the **remote** project; there is no local Supabase stack and no `supabase/` directory yet.
+
+The rest of these rules are not yet exercised by any code, but hold for the Supabase work:
 
 - Data access goes through `lib/supabase/` helpers — no ad hoc `createClient()` calls in components.
 - Client-exposed vars must be `NEXT_PUBLIC_` prefixed and may only ever carry the **anon** key. `SUPABASE_SERVICE_ROLE_KEY` must never take that prefix and must never be reachable from a client component or the browser bundle; it's for trusted server contexts that intentionally bypass RLS.
