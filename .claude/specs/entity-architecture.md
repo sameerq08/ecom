@@ -1,6 +1,10 @@
 # Entity Architecture — Ecommerce Marketplace (v1)
 
-The v1 data model: 10 required entities, their fields, and relationships.
+The v1 data model: the 10 required entities from `SPEC.md`, plus
+`ORDER_STATUS_EVENT` added in step 03 — 11 tables in total — with their fields
+and relationships.
+
+Implemented in `supabase/migrations/`; RLS proven by `supabase/tests/rls_verification.sql`.
 
 ```mermaid
 erDiagram
@@ -16,6 +20,8 @@ erDiagram
     ORDER ||--o{ ORDER_ITEM : "contains"
     PRODUCT ||--o{ ORDER_ITEM : "referenced by"
     SELLER_PROFILE ||--o{ ORDER_ITEM : "fulfills"
+    ORDER ||--o{ ORDER_STATUS_EVENT : "logs"
+    PROFILE ||--o{ ORDER_STATUS_EVENT : "records"
 
     PROFILE {
         uuid id PK
@@ -94,6 +100,15 @@ erDiagram
         int quantity
         numeric price_at_purchase
     }
+
+    ORDER_STATUS_EVENT {
+        uuid id PK
+        uuid order_id FK
+        text status "pending|confirmed|shipped|delivered"
+        uuid changed_by_profile_id FK "nullable"
+        text note
+        timestamptz created_at
+    }
 ```
 
 ## Relationships
@@ -112,6 +127,8 @@ erDiagram
 | Order | OrderItem | 1 — N | |
 | OrderItem | Product | N — 1 | Snapshot price at purchase |
 | OrderItem | SellerProfile | N — 1 | Denormalized so a seller can query only their line items across all orders |
+| Order | OrderStatusEvent | 1 — N | Append-only transition log |
+| OrderStatusEvent | Profile | N — 0..1 | Who made the change; null if that profile is later removed |
 
 ## RLS Intent (per table)
 
@@ -120,16 +137,30 @@ erDiagram
 | Profile | Own row (+ public display_name via join where needed) | Owner only |
 | SellerProfile | Public | Owner only |
 | Category | Public | None (admin-seeded, no UI in v1) |
-| Product | Public (where `is_active = true`) | Owner (`seller_profile_id` matches caller) |
-| ProductImage | Public | Owner of parent Product |
-| Inventory | Public (stock/availability display) | Owner of parent Product |
+| Product | Public where `is_active = true`, **or** the owning seller's own rows regardless of the flag — otherwise a seller's deactivated listings vanish from `/seller/products` | Owner (`seller_profile_id` matches caller) |
+| ProductImage | Public, where the parent Product is visible to the caller | Owner of parent Product |
+| Inventory | Public (stock/availability display), where the parent Product is visible | Owner of parent Product |
 | Cart | Owner only | Owner only |
 | CartItem | Owner (via parent Cart) | Owner (via parent Cart) |
-| Order | Owner (buyer) | Insert by owner (buyer) at checkout |
-| OrderItem | Owner (buyer, via parent Order) **or** seller where `seller_profile_id` matches caller | Insert by buyer at checkout; `status`-relevant updates happen on `Order`, not `OrderItem`, so seller updates target `Order.status` scoped to orders containing their `OrderItem` rows |
+| Order | Owner (buyer) **or** a seller with a line item in it | Insert by owner (buyer) at checkout; `status` update by a seller with a line item in it. No delete |
+| OrderItem | Owner (buyer, via parent Order) **or** seller where `seller_profile_id` matches caller | Insert by buyer at checkout, and only where `seller_profile_id` matches the product's true seller. `status`-relevant updates happen on `Order`, not `OrderItem`. No update, no delete — an immutable purchase record |
+| OrderStatusEvent | Same audience as the parent Order | Insert only, by a participant: a seller for any transition they may make, the buyer for the opening `pending` event at checkout. Always stamped with the caller's own profile. No update, no delete — append-only |
+
+Two implementation notes from step 03:
+
+- RLS gates rows, not columns, so `Order` additionally carries a column grant
+  restricting a seller's update right to `status` alone — without it, the update
+  policy would also let a seller rewrite `shipping_address`.
+- Ownership predicates live in a `private` schema, not `public`. Anything in
+  `public` is published by PostgREST as an RPC endpoint, which would make every
+  helper callable by `anon`.
+
+Known v1 limitation: status lives on the Order rather than the OrderItem, so in
+an order spanning two sellers either seller advances the status for the whole
+order. `OrderStatusEvent.changed_by_profile_id` makes that attributable.
 
 ## Coverage Check
 
 Screens: Product Home, Search/Filter, Product Detail, Seller Signal/Profile, Cart, Checkout, Customer Order Status, Seller Dashboard, Product Management, Seller Order Status Updates, Supporting Systems — all covered in `visual-architecture.md`.
 
-Entities: Profile, SellerProfile, Category, Product, ProductImage, Inventory, Cart, CartItem, Order, OrderItem — all covered above.
+Entities: Profile, SellerProfile, Category, Product, ProductImage, Inventory, Cart, CartItem, Order, OrderItem, OrderStatusEvent — all covered above.

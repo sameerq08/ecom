@@ -10,11 +10,13 @@ Intended stack: Next.js 16 (App Router, React 19, TypeScript) + Tailwind v4 + Su
 
 ## Current state — read this first
 
-**The backend does not exist yet.** There is no `supabase` dependency, no `lib/supabase/`, no `supabase/migrations/`, no `.env*` files, no auth, and no payment processing. Every screen is driven by local seed data in `lib/data/`.
+**The database exists, but nothing in the app talks to it yet.** Step 03 created the schema, auth and RLS on the remote Supabase project; the application is still driven entirely by local seed data in `lib/data/`. So there is a real Postgres backend *and* no `supabase` npm dependency, no `lib/supabase/`, no client, no session, and no payment processing. Both halves of that sentence matter — do not assume a screen reads from the database, and do not re-create schema that already exists.
 
 Routes that exist: `/`, `/search`, `/products/[id]`, `/cart`, `/checkout`, `/orders`, `/orders/[id]`, `/seller`, `/seller/products`, `/seller/orders`. Only `/sellers/[id]` (the public seller profile) from `.claude/specs/visual-architecture.md` is still unbuilt.
 
-Steps completed: `01-product-browsing-and-detail` (catalog), `02-order-cart-and-checkout` (cart, checkout, orders, seller dashboard).
+Steps completed: `01-product-browsing-and-detail` (catalog), `02-order-cart-and-checkout` (cart, checkout, orders, seller dashboard), `03-supabase-schema-and-rls` (11 tables, email/password auth, RLS).
+
+Step 04 is the swap: install `@supabase/supabase-js` + `@supabase/ssr`, add `lib/supabase/` helpers, auth screens and session handling, then rewrite the `lib/data/` modules against real queries. Two things were deliberately deferred to it, and are decisions rather than gaps: decrementing `inventory.stock_qty` at checkout, and validating `price_at_purchase` against the live price. Both are transactional rather than row-scoped and belong in a database function.
 
 **`lib/data/` is the only data-access seam.** Screens call its exported helpers, never a raw array — swapping in Supabase should touch these five files and nothing else:
 
@@ -92,15 +94,26 @@ Loading states use **skeletons shaped like the real content** (`ProductCardSkele
 
 - Strict mode; no `any` — use `unknown` plus narrowing.
 - Functional components only.
-- Once Supabase exists: never hand-write DB types, regenerate via `supabase gen types typescript`.
+- Never hand-write DB types. `lib/types/database.ts` is generated (see "When the backend is added"); `lib/types/ui.ts` holds the separate, temporary presentational view-models.
 
 ## When the backend is added
 
-A Supabase MCP server is wired up in `.mcp.json` (project `xzurhfeetpwthaswutnc`), so schema and log inspection go through the `mcp__supabase__*` tools — `list_tables` before any schema change, `apply_migration` (not `execute_sql`) for DDL, `get_advisors` after. Note that this points at the **remote** project; there is no local Supabase stack and no `supabase/` directory yet.
+A Supabase MCP server is wired up in `.mcp.json` (project `xzurhfeetpwthaswutnc`), so schema and log inspection go through the `mcp__supabase__*` tools — `list_tables` before any schema change, `apply_migration` (not `execute_sql`) for DDL, `get_advisors` after. It points at the **remote** project; there is no local Supabase stack and no Supabase CLI.
 
-The rest of these rules are not yet exercised by any code, but hold for the Supabase work:
+**Migration workflow.** Apply through `apply_migration`, then mirror the exact SQL into `supabase/migrations/<version>_<name>.sql` in the same change — the tool records history remotely, and committing the SQL is what makes the schema reviewable in a diff. Never edit an applied migration; add a new one.
+
+**Schema facts worth knowing before you touch it:**
+
+- Ownership predicates live in `private`, not `public`. Anything in `public` is published by PostgREST as `/rest/v1/rpc/<name>`, so a helper there is callable by `anon` — the linter flags it. Their bodies pin `search_path = ''` and so must qualify every reference, including calls to each other.
+- RLS policies bind functions by OID, so they survive a schema move; function *bodies* do not, because their inner calls are written by name. That is what `20260812154313_repoint_rls_helper_bodies_to_private.sql` exists to fix.
+- Policies are per-operation and name their roles, and every helper call is wrapped as `(select fn())` so the planner caches it as an initPlan instead of running per row. Both are `get_advisors` findings if you skip them.
+- `orders` carries a column grant (`update (status)` only), because RLS gates rows and not columns. Without it the seller update policy would also permit rewriting `shipping_address`.
+- `get_advisors` still reports `public.rls_auto_enable` — that is Supabase's own platform event-trigger, not ours, and not ours to remove.
+
+`supabase/tests/rls_verification.sql` proves all 51 allow/deny cases. It runs inside a single transaction ending in `ROLLBACK`, creating and discarding its own `auth.users` fixtures, so it is safe to re-run against the live project. Run it after any policy change. Note that a denial assertion treats an error as a pass, so it deliberately fails on `does not exist` — otherwise a broken reference would masquerade as good security.
 
 - Data access goes through `lib/supabase/` helpers — no ad hoc `createClient()` calls in components.
+- Never hand-write DB types. Regenerate `lib/types/database.ts` via `mcp__supabase__generate_typescript_types` and commit it unmodified — no header comments, so the next regeneration is a clean overwrite.
 - Client-exposed vars must be `NEXT_PUBLIC_` prefixed and may only ever carry the **anon** key. `SUPABASE_SERVICE_ROLE_KEY` must never take that prefix and must never be reachable from a client component or the browser bundle; it's for trusted server contexts that intentionally bypass RLS.
 - Declare env vars in `.env.local` (gitignored) and document names-only in `.env.example`. A committed secret is a compromised secret: rotate in Supabase first, then scrub history.
 - Every touched RLS policy must be verified against **both** an authorized and an unauthorized role before the change is called done.
@@ -110,7 +123,7 @@ The rest of these rules are not yet exercised by any code, but hold for the Supa
 
 1. `npm run lint` and `npm run typecheck` pass.
 2. For UI changes, exercise the affected flow in the running dev server — not just type/lint checks.
-3. RLS and entity checks above, once those layers exist.
+3. For schema changes: `supabase/tests/rls_verification.sql` fully passing, `get_advisors` clean for `security`, and `.claude/specs/entity-architecture.md` updated to match.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
