@@ -72,6 +72,16 @@ export type CartLine = {
   id: string;
   product: Product;
   quantity: number;
+  /** Stock ceiling for this line's product — the quantity stepper's upper bound. */
+  maxQuantity: number;
+};
+
+/** Derived totals for a set of cart lines. Computed once, never stored. */
+export type CartTotals = {
+  itemCount: number;
+  subtotal: number;
+  /** True when at least one line is out of stock, which blocks checkout. */
+  hasBlockedLine: boolean;
 };
 
 export type OrderSummary = {
@@ -83,6 +93,28 @@ export type OrderSummary = {
   status: OrderStatus;
 };
 
+/** A single line of a placed order. `priceAtPurchase` is a snapshot, not a live price. */
+export type OrderLine = {
+  id: string;
+  product: Product;
+  quantity: number;
+  priceAtPurchase: number;
+};
+
+export type OrderDetail = OrderSummary & {
+  lines: readonly OrderLine[];
+  shippingAddress: readonly string[];
+  itemCount: number;
+};
+
+/** One row of the seller's own listings table. Includes inactive listings. */
+export type SellerListingRow = {
+  product: Product;
+  categoryName: string;
+  stockQty: number;
+  active: boolean;
+};
+
 export type SellerOrderRow = {
   id: string;
   orderNumber: string;
@@ -90,6 +122,18 @@ export type SellerOrderRow = {
   customerName: string;
   amount: number;
   status: OrderStatus;
+};
+
+/** One of the seller's line items across all orders. `status` belongs to the parent order. */
+export type SellerOrderItemRow = SellerOrderRow & {
+  orderId: string;
+  productName: string;
+  quantity: number;
+};
+
+export type SellerStats = {
+  activeListings: number;
+  ordersNeedingAction: number;
 };
 
 export function formatPrice(value: number): string {

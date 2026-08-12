@@ -1,9 +1,21 @@
+import Link from "next/link";
+import { removeFromCart } from "@/app/cart/actions";
 import { ProductImage } from "@/components/product/ProductImage";
 import { formatPrice, type CartLine } from "@/lib/types/ui";
 import { QuantityStepper } from "./QuantityStepper";
 
-export function CartRow({ line }: { line: CartLine }) {
-  const { product, quantity } = line;
+/**
+ * `editable` is false on checkout, where the same row renders as a read-only
+ * review line rather than duplicating the layout in a second component.
+ */
+export function CartRow({
+  line,
+  editable = true,
+}: {
+  line: CartLine;
+  editable?: boolean;
+}) {
+  const { product, quantity, maxQuantity } = line;
 
   return (
     <div className="flex flex-col gap-4 border-b border-border py-4 sm:flex-row">
@@ -20,7 +32,12 @@ export function CartRow({ line }: { line: CartLine }) {
         <div>
           <div className="flex items-start justify-between gap-4">
             <h3 className="line-clamp-2 text-body-lg font-semibold text-text-main">
-              {product.name}
+              <Link
+                href={`/products/${product.id}`}
+                className="hover:text-link hover:underline"
+              >
+                {product.name}
+              </Link>
             </h3>
             <span className="whitespace-nowrap text-title-lg font-bold text-text-main">
               {formatPrice(product.price)}
@@ -39,13 +56,28 @@ export function CartRow({ line }: { line: CartLine }) {
         </div>
 
         <div className="mt-4 flex items-center gap-4">
-          <QuantityStepper quantity={quantity} />
-          <button
-            type="button"
-            className="flex h-touch items-center text-body-sm text-link hover:underline"
-          >
-            Delete
-          </button>
+          {editable ? (
+            <>
+              <QuantityStepper
+                lineId={line.id}
+                quantity={quantity}
+                maxQuantity={maxQuantity}
+              />
+              <form action={removeFromCart}>
+                <input type="hidden" name="lineId" value={line.id} />
+                <button
+                  type="submit"
+                  className="flex h-touch items-center text-body-sm text-link hover:underline"
+                >
+                  Delete
+                </button>
+              </form>
+            </>
+          ) : (
+            <p className="text-body-sm text-text-muted">
+              Quantity: <span className="font-bold">{quantity}</span>
+            </p>
+          )}
         </div>
       </div>
     </div>

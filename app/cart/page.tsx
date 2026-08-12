@@ -1,90 +1,78 @@
+import Link from "next/link";
 import { CartRow } from "@/components/cart/CartRow";
-import { Button } from "@/components/ui/Button";
+import { CartSummary } from "@/components/cart/CartSummary";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatPrice, type CartLine } from "@/lib/types/ui";
+import { getCart, summarizeCart } from "@/lib/data/cart";
+import { formatPrice } from "@/lib/types/ui";
 
-// PLACEHOLDER DATA — replaced by Supabase queries in a later step.
-const sampleLines: CartLine[] = [
-  {
-    id: "l1",
-    quantity: 1,
-    product: {
-      id: "1",
-      name: "Premium Noise Cancelling Wireless Over-Ear Headphones, Black",
-      price: 299,
-      rating: 4.5,
-      imageUrl: "/window.svg",
-      sellerName: "Acoustic Pro Direct",
-      inStock: true,
-    },
-  },
-  {
-    id: "l2",
-    quantity: 2,
-    product: {
-      id: "4",
-      name: "Smart Home Indoor Security Camera, 1080p HD Video",
-      price: 49.99,
-      rating: 3.5,
-      imageUrl: "/next.svg",
-      sellerName: "HomeSafe",
-      inStock: true,
-    },
-  },
-];
+export default async function CartPage() {
+  const lines = await getCart();
+  const totals = summarizeCart(lines);
 
-export default function CartPage() {
-  const itemCount = sampleLines.reduce((sum, line) => sum + line.quantity, 0);
-  const subtotal = sampleLines.reduce(
-    (sum, line) => sum + line.product.price * line.quantity,
-    0,
-  );
+  if (lines.length === 0) {
+    return (
+      <div className="flex flex-col gap-8">
+        <h1 className="text-display-lg text-text-main">Cart</h1>
+        <EmptyState
+          icon={<span className="text-display-lg">🛒</span>}
+          title="Your cart is empty"
+          description="Browse the marketplace to find products from our sellers."
+          actions={
+            <Link
+              href="/"
+              className="inline-flex h-touch w-full items-center justify-center rounded border border-border bg-surface px-4 text-body-md font-bold text-text-main transition-colors hover:bg-surface-muted"
+            >
+              Keep browsing
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-display-lg">Cart</h1>
+      <h1 className="text-display-lg text-text-main">Cart</h1>
 
       <div className="flex flex-col gap-6 lg:flex-row">
         <Card className="flex-grow p-5">
-          {sampleLines.map((line) => (
+          {lines.map((line) => (
             <CartRow key={line.id} line={line} />
           ))}
           <div className="pt-4 text-right">
             <span className="text-body-lg text-text-main">
-              Subtotal ({itemCount} items):{" "}
+              Subtotal ({totals.itemCount}{" "}
+              {totals.itemCount === 1 ? "item" : "items"}):{" "}
             </span>
             <span className="text-title-lg font-bold text-text-main">
-              {formatPrice(subtotal)}
+              {formatPrice(totals.subtotal)}
             </span>
           </div>
         </Card>
 
-        <Card className="h-fit w-full flex-shrink-0 p-5 lg:w-[320px]">
-          <div className="mb-4 text-body-lg text-text-main">
-            Subtotal ({itemCount} items):{" "}
-            <span className="font-bold">{formatPrice(subtotal)}</span>
-          </div>
-          <Button fullWidth>Proceed to Checkout</Button>
-        </Card>
-      </div>
-
-      <section className="flex flex-col gap-4">
-        <h2 className="text-headline-md">Empty state</h2>
-        <EmptyState
-          icon={<span className="text-4xl">🛒</span>}
-          title="Your cart is empty"
-          description="Browse the marketplace to find products from our sellers."
-          actions={
-            <>
-              <Button variant="outline" fullWidth>
-                Keep browsing
-              </Button>
-              <Button fullWidth>Shop now</Button>
-            </>
+        <CartSummary
+          totals={totals}
+          action={
+            totals.hasBlockedLine ? (
+              // Amber is a conversion colour; a blocked CTA must not wear it.
+              <span
+                aria-disabled="true"
+                className="inline-flex h-touch w-full cursor-not-allowed items-center justify-center rounded border border-border bg-surface-muted px-4 text-body-md font-bold text-text-muted"
+              >
+                Proceed to Checkout
+              </span>
+            ) : (
+              <Link
+                href="/checkout"
+                className="inline-flex h-touch w-full items-center justify-center rounded bg-accent px-4 text-body-md font-bold text-on-accent transition-colors hover:bg-accent-hover"
+              >
+                Proceed to Checkout
+              </Link>
+            )
           }
         />
-      </section>
+      </div>
     </div>
   );
 }
