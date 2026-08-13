@@ -31,7 +31,7 @@ export default async function ProductDetailPage(
 
   const searchParams = await props.searchParams;
   const activeIndex = resolveImageIndex(searchParams.image, product.images.length);
-  const category = getCategoryBySlug(product.categorySlug);
+  const category = await getCategoryBySlug(product.categorySlug);
 
   return (
     <div className="flex flex-col gap-6">

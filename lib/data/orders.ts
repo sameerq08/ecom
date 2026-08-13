@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { getCart, clearCart, summarizeCart } from "@/lib/data/cart";
-import { findProduct, simulateLatency } from "@/lib/data/products";
+import { findProduct, simulateLatency } from "@/lib/data/seed-catalog";
 import {
   ORDER_STATUS_STEPS,
   type OrderDetail,

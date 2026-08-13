@@ -138,20 +138,23 @@ where user_id in ('33333333-3333-3333-3333-333333333333',
                   '44444444-4444-4444-4444-444444444444');
 
 -- Catalog: Seller A gets one active and one inactive listing; Seller B one active.
-insert into public.products (id, seller_profile_id, category_id, name, price, is_active)
+insert into public.products (id, seller_profile_id, category_id, name, slug, price, is_active)
 values
   ('aaaaaaaa-0000-0000-0000-000000000001',
    (select sp.id from public.seller_profiles sp join public.profiles p on p.id = sp.profile_id
     where p.user_id = '33333333-3333-3333-3333-333333333333'),
-   (select id from public.categories where slug = 'electronics'), 'A Active', 10.00, true),
+   (select id from public.categories where slug = 'electronics'),
+   'A Active', 'rls-fixture-a-active', 10.00, true),
   ('aaaaaaaa-0000-0000-0000-000000000002',
    (select sp.id from public.seller_profiles sp join public.profiles p on p.id = sp.profile_id
     where p.user_id = '33333333-3333-3333-3333-333333333333'),
-   (select id from public.categories where slug = 'books'), 'A Inactive', 20.00, false),
+   (select id from public.categories where slug = 'books'),
+   'A Inactive', 'rls-fixture-a-inactive', 20.00, false),
   ('bbbbbbbb-0000-0000-0000-000000000001',
    (select sp.id from public.seller_profiles sp join public.profiles p on p.id = sp.profile_id
     where p.user_id = '44444444-4444-4444-4444-444444444444'),
-   (select id from public.categories where slug = 'books'), 'B Active', 30.00, true);
+   (select id from public.categories where slug = 'books'),
+   'B Active', 'rls-fixture-b-active', 30.00, true);
 
 insert into public.inventory (product_id, stock_qty)
 values ('aaaaaaaa-0000-0000-0000-000000000001', 5),
@@ -223,8 +226,11 @@ select pg_temp.assert_count('anon blocked from order_status_events', null,
 select pg_temp.assert_denied('anon cannot insert a category', null,
   $q$insert into public.categories (name, slug) values ('Hacked', 'hacked')$q$);
 select pg_temp.assert_denied('anon cannot insert a product', null,
-  $q$insert into public.products (seller_profile_id, category_id, name, price)
-     select seller_profile_id, category_id, 'Hacked', 1 from public.products limit 1$q$);
+  -- slug is supplied so this is denied by RLS, not by the not-null constraint:
+  -- a constraint failure would still read as a pass and stop proving anything.
+  $q$insert into public.products (seller_profile_id, category_id, name, slug, price)
+     select seller_profile_id, category_id, 'Hacked', 'rls-fixture-hacked', 1
+     from public.products limit 1$q$);
 select pg_temp.assert_denied('anon cannot update a product', null,
   $q$update public.products set name = 'Hacked'$q$);
 select pg_temp.assert_denied('anon cannot update inventory', null,
@@ -292,8 +298,9 @@ select pg_temp.assert_denied('seller A cannot add image to B product', pg_temp.j
   $q$insert into public.product_images (product_id, url)
      values ('bbbbbbbb-0000-0000-0000-000000000001', '/hack.svg')$q$);
 select pg_temp.assert_denied('seller A cannot list under B seller id', pg_temp.jwt('33333333-3333-3333-3333-333333333333'),
-  $q$insert into public.products (seller_profile_id, category_id, name, price)
-     select seller_profile_id, category_id, 'Impersonated', 1
+  -- slug supplied for the same reason as the anon insert above.
+  $q$insert into public.products (seller_profile_id, category_id, name, slug, price)
+     select seller_profile_id, category_id, 'Impersonated', 'rls-fixture-impersonated', 1
      from public.products where id = 'bbbbbbbb-0000-0000-0000-000000000001'$q$);
 
 -- ------------------------------------------------------------ order status --

@@ -5,7 +5,7 @@ import {
   countActiveListings,
   findProduct,
   getSellerListings as getListingsForSeller,
-} from "@/lib/data/products";
+} from "@/lib/data/seed-catalog";
 import type {
   OrderStatus,
   SellerListingRow,

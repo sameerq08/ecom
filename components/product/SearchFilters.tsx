@@ -1,5 +1,4 @@
-import { CATEGORIES } from "@/lib/data/categories";
-import type { ProductFilters } from "@/lib/types/ui";
+import type { Category, ProductFilters } from "@/lib/types/ui";
 
 const RATING_OPTIONS = [4, 3, 2] as const;
 
@@ -15,9 +14,11 @@ const labelClass = "text-label-md text-text-main";
 export function SearchFilters({
   filters,
   sellers,
+  categories,
 }: {
   filters: ProductFilters;
   sellers: readonly string[];
+  categories: readonly Category[];
 }) {
   return (
     <form
@@ -51,7 +52,7 @@ export function SearchFilters({
           className={fieldClass}
         >
           <option value="">All categories</option>
-          {CATEGORIES.map((category) => (
+          {categories.map((category) => (
             <option key={category.slug} value={category.slug}>
               {category.name}
             </option>

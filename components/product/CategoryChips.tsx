@@ -1,11 +1,16 @@
 import Link from "next/link";
-import { CATEGORIES } from "@/lib/data/categories";
+import { getCategories } from "@/lib/data/categories";
 
 /**
  * Category filter entry points. These are links, not buttons, so filtering
  * works without JavaScript and every category view has a shareable URL.
+ *
+ * Reads the category list itself rather than taking it as a prop: it is used on
+ * more than one screen and needs no other data, and `getCategories` is
+ * request-cached so rendering it beside a category lookup is still one query.
  */
-export function CategoryChips({ activeSlug }: { activeSlug?: string }) {
+export async function CategoryChips({ activeSlug }: { activeSlug?: string }) {
+  const categories = await getCategories();
   const chipBase =
     "flex h-touch items-center whitespace-nowrap rounded-full border px-4 text-body-md transition-colors";
 
@@ -25,7 +30,7 @@ export function CategoryChips({ activeSlug }: { activeSlug?: string }) {
             All
           </Link>
         </li>
-        {CATEGORIES.map((category) => {
+        {categories.map((category) => {
           const isActive = category.slug === activeSlug;
           return (
             <li key={category.slug}>
