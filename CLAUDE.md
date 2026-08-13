@@ -10,15 +10,25 @@ Intended stack: Next.js 16 (App Router, React 19, TypeScript) + Tailwind v4 + Su
 
 ## Current state — read this first
 
-**The database exists, but nothing in the app talks to it yet.** Step 03 created the schema, auth and RLS on the remote Supabase project; the application is still driven entirely by local seed data in `lib/data/`. So there is a real Postgres backend *and* no `supabase` npm dependency, no `lib/supabase/`, no client, no session, and no payment processing. Both halves of that sentence matter — do not assume a screen reads from the database, and do not re-create schema that already exists.
+**Auth talks to the database. Nothing else does.** Step 05 connected Supabase Auth — there is a real session, cookie-backed and refreshed in `proxy.ts` — but every catalog and commerce screen is still driven by local seed data in `lib/data/`. Both halves matter: do not assume a screen reads from the database, and do not re-create the schema or the auth layer, which already exist.
 
-Routes that exist: `/`, `/search`, `/products/[id]`, `/cart`, `/checkout`, `/orders`, `/orders/[id]`, `/seller`, `/seller/products`, `/seller/orders`. Only `/sellers/[id]` (the public seller profile) from `.claude/specs/visual-architecture.md` is still unbuilt.
+The seam is deliberate and temporary. A user signed in as `homesafe@demo.market` sees their name in the header while `/seller` lists HomeSafe's products because `CURRENT_SELLER_ID` says so, not because the session does. Those are two disconnected identities until step 04 joins them. Do not half-join them.
 
-Steps completed: `01-product-browsing-and-detail` (catalog), `02-order-cart-and-checkout` (cart, checkout, orders, seller dashboard), `03-supabase-schema-and-rls` (11 tables, email/password auth, RLS).
+Routes that exist: `/`, `/search`, `/products/[id]`, `/cart`, `/checkout`, `/orders`, `/orders/[id]`, `/seller`, `/seller/products`, `/seller/orders`, plus `/signin`, `/signup`, `/account` and the `/signout` action. Only `/sellers/[id]` (the public seller profile) from `.claude/specs/visual-architecture.md` is still unbuilt.
 
-The database is also **populated**: `20260813101702_seed_marketplace_demo_data.sql` transcribes `lib/data/` into it one-for-one — the same 5 sellers, 17 products, images, stock and orders, plus one extra order so all four `order_status` values appear. Six demo accounts back it (`*@demo.market`, password in the migration header; see `.env.example`), `homesafe@demo.market` being the seller `CURRENT_SELLER_ID` stands in for. That mirroring is the point: after the step 04 swap the screens should render identically, so any visual difference is a bug in the swap. Product ids are `uuid_generate_v5` of the seed slug, so the mapping stays mechanical — but the app routes on slugs and `products` has no `slug` column, which step 04 must resolve either way (see the closing section of `.claude/specs/entity-architecture.md`).
+Steps completed: `01-product-browsing-and-detail` (catalog), `02-order-cart-and-checkout` (cart, checkout, orders, seller dashboard), `03-supabase-schema-and-rls` (11 tables, email/password auth, RLS), `05-supabase-auth-integration` (client, session, auth screens, profile shell). **Step 04 is still outstanding** — it was specced before 05 and originally owned the auth work; see the scope-change note at the top of `.claude/specs/04-supabase-data-layer-swap.md`.
 
-Step 04 is the swap: install `@supabase/supabase-js` + `@supabase/ssr`, add `lib/supabase/` helpers, auth screens and session handling, then rewrite the `lib/data/` modules against real queries. Two things were deliberately deferred to it, and are decisions rather than gaps: decrementing `inventory.stock_qty` at checkout, and validating `price_at_purchase` against the live price. Both are transactional rather than row-scoped and belong in a database function.
+The database is also **populated**: `20260813101702_seed_marketplace_demo_data.sql` transcribes `lib/data/` into it one-for-one — the same 5 sellers, 17 products, images, stock and orders, plus one extra order so all four `order_status` values appear. Six demo accounts back it (`*@demo.market`, shared password in the migration header), `homesafe@demo.market` being the seller `CURRENT_SELLER_ID` stands in for. That mirroring is the point: after the step 04 swap the screens should render identically, so any visual difference is a bug in the swap. Product ids are `uuid_generate_v5` of the seed slug, so the mapping stays mechanical — but the app routes on slugs and `products` has no `slug` column, which step 04 must resolve either way (see the closing section of `.claude/specs/entity-architecture.md`).
+
+Step 04 is the remaining swap: rewrite the `lib/data/` modules against real queries and apply the auth gates to the buyer and seller screens. The client, session helpers and auth screens it originally specced are already built. Two things were deliberately deferred to it, and are decisions rather than gaps: decrementing `inventory.stock_qty` at checkout, and validating `price_at_purchase` against the live price. Both are transactional rather than row-scoped and belong in a database function.
+
+**The auth layer, added in step 05:**
+
+- `lib/supabase/server.ts` — the only place a server client is constructed, one per request. Its `setAll` swallows the cookie-write failure that a Server Component render always produces; that is safe *only because* `proxy.ts` refreshes on every request.
+- `lib/supabase/session.ts` — `getSessionUser`, `getCurrentProfile`, `requireProfile`. Always `getUser()`, never `getSession()`, for anything gating access: the latter trusts the cookie without verifying it. This is the module step 04 extends with a seller lookup to retire `CURRENT_SELLER_ID`.
+- `proxy.ts` — session refresh only, never authorization. Next 16 renamed `middleware.ts` to `proxy.ts`, the export is `proxy`, and setting a `runtime` key **throws**. Supabase's published SSR guides still say middleware and are wrong here. Server Actions are POSTs to their own route, so a matcher exclusion silently skips them — every real gate lives in the page or action.
+- Auth screens are plain `<form action={...}>` with no client component, so they work with JavaScript off. Failures redirect with an *opaque* code (`?error=invalid`) rather than using `useActionState`, which would require going client-side; sign-in gives one message for both wrong-password and no-such-user so it cannot be used to enumerate accounts.
+- `.env` and `.env.example` carry only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. No application code reads `SUPABASE_SERVICE_ROLE_KEY`, and none should.
 
 **`lib/data/` is the only data-access seam.** Screens call its exported helpers, never a raw array — swapping in Supabase should touch these five files and nothing else:
 
@@ -58,6 +68,8 @@ Before any structural change, read the relevant spec. They are detailed and auth
 - `.claude/specs/entity-architecture.md` — full ERD: 10 entities, fields, relationships, RLS intent
 - `.claude/specs/ui-architecture.md` — design tokens, type scale, and per-component layout rules
 - `plan/` — scoping documents behind the specs
+
+The numbered step specs in `.claude/specs/` are the per-step contracts. `01`–`03` are built; `04-supabase-data-layer-swap.md` and `05-supabase-auth-integration.md` are written but unimplemented. **They overlap:** spec 04 was written first and claims the auth work (sign-in/up/out routes, `lib/supabase/`, `proxy.ts`); spec 05 later carves that out so auth lands before the data swap, keeping `lib/data/` on seed data meanwhile. Reconciling the two — stripping auth from 04 — is part of step 05's own scope. Read both before starting either.
 
 Note: `SPEC.md` and the header comment in `lib/types/ui.ts` still reference the old `specs/` path; these files moved to `.claude/specs/` in commit `a0c666b`.
 
@@ -100,7 +112,7 @@ Loading states use **skeletons shaped like the real content** (`ProductCardSkele
 
 ## When the backend is added
 
-A Supabase MCP server is wired up in `.mcp.json` (project `xzurhfeetpwthaswutnc`), so schema and log inspection go through the `mcp__supabase__*` tools — `list_tables` before any schema change, `apply_migration` (not `execute_sql`) for DDL, `get_advisors` after. It points at the **remote** project; there is no local Supabase stack and no Supabase CLI.
+A Supabase MCP server is wired up in `.mcp.json` (project `xzurhfeetpwthaswutnc`). Note that `.gitignore` lists `.mcp.json`, so it is **not checked in** — a fresh clone has no MCP server until the file is recreated locally. Schema and log inspection go through the `mcp__supabase__*` tools — `list_tables` before any schema change, `apply_migration` (not `execute_sql`) for DDL, `get_advisors` after. It points at the **remote** project; there is no local Supabase stack and no Supabase CLI.
 
 **Migration workflow.** Apply through `apply_migration`, then mirror the exact SQL into `supabase/migrations/<version>_<name>.sql` in the same change — the tool records history remotely, and committing the SQL is what makes the schema reviewable in a diff. Never edit an applied migration; add a new one.
 
@@ -117,7 +129,7 @@ A Supabase MCP server is wired up in `.mcp.json` (project `xzurhfeetpwthaswutnc`
 - Data access goes through `lib/supabase/` helpers — no ad hoc `createClient()` calls in components.
 - Never hand-write DB types. Regenerate `lib/types/database.ts` via `mcp__supabase__generate_typescript_types` and commit it unmodified — no header comments, so the next regeneration is a clean overwrite.
 - Client-exposed vars must be `NEXT_PUBLIC_` prefixed and may only ever carry the **anon** key. `SUPABASE_SERVICE_ROLE_KEY` must never take that prefix and must never be reachable from a client component or the browser bundle; it's for trusted server contexts that intentionally bypass RLS.
-- Declare env vars in `.env.local` (gitignored) and document names-only in `.env.example`. A committed secret is a compromised secret: rotate in Supabase first, then scrub history.
+- Env vars live in `.env` in this repo (not `.env.local`). `.gitignore` matches `.env*` with a single negation for `!.env.example`, the names-only template — but **`.env.example` was deleted in `36c0837` and does not currently exist**, so there is no checked-in record of which names are required. Step 05 recreates it. A committed secret is a compromised secret: rotate in Supabase first, then scrub history.
 - Every touched RLS policy must be verified against **both** an authorized and an unauthorized role before the change is called done.
 - Cross-check new/changed entities against `.claude/specs/entity-architecture.md` and update that file if the schema diverges.
 

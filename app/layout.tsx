@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
 import { getCartCount } from "@/lib/data/cart";
+import { getCurrentProfile } from "@/lib/supabase/session";
+import { signOut } from "@/app/signout/actions";
 import "./globals.css";
 
 const inter = Inter({
@@ -26,8 +28,18 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Server Actions revalidate the layout, which is what keeps this badge in
-  // step with the cart rather than going stale after a quantity change.
-  const cartCount = await getCartCount();
+  // step with the cart rather than going stale after a quantity change. The
+  // auth actions revalidate at layout scope for the same reason — the nav
+  // below now renders the session as well.
+  //
+  // The nav links stay ungated: the seller screens still read the seed layer
+  // in `lib/data/`, not the session, so hiding them behind a role would hide
+  // working screens on the strength of an identity they don't consult yet.
+  // Step 04 gates them, when they actually read per-user rows.
+  const [cartCount, profile] = await Promise.all([
+    getCartCount(),
+    getCurrentProfile(),
+  ]);
 
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
@@ -56,6 +68,34 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                   ) : null}
                 </Link>
               ))}
+            </div>
+
+            <div className="ml-auto flex items-center gap-1">
+              {profile ? (
+                <>
+                  <Link
+                    href="/account"
+                    className="flex h-touch items-center rounded px-3 text-body-md hover:bg-white/10"
+                  >
+                    {profile.displayName ?? "Account"}
+                  </Link>
+                  <form action={signOut}>
+                    <button
+                      type="submit"
+                      className="flex h-touch items-center rounded px-3 text-body-md hover:bg-white/10"
+                    >
+                      Sign out
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <Link
+                  href="/signin"
+                  className="flex h-touch items-center rounded px-3 text-body-md hover:bg-white/10"
+                >
+                  Sign in
+                </Link>
+              )}
             </div>
           </nav>
         </header>

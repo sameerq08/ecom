@@ -73,6 +73,14 @@ flowchart TD
 | Seller Dashboard | `/seller` | SellerProfile, Product, Order (summary) | Seller |
 | Product Management | `/seller/products` | Product, ProductImage, Inventory | Seller (owner) |
 | Seller Order Status Updates | `/seller/orders` | Order, OrderItem (filtered by seller) | Seller (owner) |
+| Sign Up | `/signup` | Profile (created by the `handle_new_user` trigger) | Public |
+| Sign In | `/signin` | — (Supabase Auth only) | Public |
+| Sign Out | `/signout` (POST action, no page) | — (Supabase Auth only) | Logged-in |
+| Account | `/account` | Profile | Logged-in |
+
+Auth screens were added in step 05 (`.claude/specs/05-supabase-auth-integration.md`). This document originally modelled auth as a supporting system with no routes of its own; sign-up, sign-in and a profile shell need real screens, so they are recorded here.
+
+**The "Auth Requirement" column above states the intended end state, not what is currently enforced.** As of step 05 only `/account` is gated. The Buyer and Seller rows are still ungated in code, because those screens read the local seed layer in `lib/data/` rather than per-user database rows — gating them would lock visitors out of screens that hold no private data. Step 04 (`.claude/specs/04-supabase-data-layer-swap.md`) repoints them at Postgres and applies the gates at the same time.
 
 ## Supporting Systems
 
