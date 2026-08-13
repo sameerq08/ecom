@@ -16,6 +16,8 @@ Routes that exist: `/`, `/search`, `/products/[id]`, `/cart`, `/checkout`, `/ord
 
 Steps completed: `01-product-browsing-and-detail` (catalog), `02-order-cart-and-checkout` (cart, checkout, orders, seller dashboard), `03-supabase-schema-and-rls` (11 tables, email/password auth, RLS).
 
+The database is also **populated**: `20260813101702_seed_marketplace_demo_data.sql` transcribes `lib/data/` into it one-for-one — the same 5 sellers, 17 products, images, stock and orders, plus one extra order so all four `order_status` values appear. Six demo accounts back it (`*@demo.market`, password in the migration header; see `.env.example`), `homesafe@demo.market` being the seller `CURRENT_SELLER_ID` stands in for. That mirroring is the point: after the step 04 swap the screens should render identically, so any visual difference is a bug in the swap. Product ids are `uuid_generate_v5` of the seed slug, so the mapping stays mechanical — but the app routes on slugs and `products` has no `slug` column, which step 04 must resolve either way (see the closing section of `.claude/specs/entity-architecture.md`).
+
 Step 04 is the swap: install `@supabase/supabase-js` + `@supabase/ssr`, add `lib/supabase/` helpers, auth screens and session handling, then rewrite the `lib/data/` modules against real queries. Two things were deliberately deferred to it, and are decisions rather than gaps: decrementing `inventory.stock_qty` at checkout, and validating `price_at_purchase` against the live price. Both are transactional rather than row-scoped and belong in a database function.
 
 **`lib/data/` is the only data-access seam.** Screens call its exported helpers, never a raw array — swapping in Supabase should touch these five files and nothing else:

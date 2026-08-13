@@ -6,6 +6,14 @@
 --
 -- Every policy is checked from both sides: the role that should be allowed and
 -- the role that should be denied, per the verification plan in SPEC.md.
+--
+-- Reads over publicly-visible tables are scoped to this file's own fixtures
+-- (`Store %` storefronts, `aaaaaaaa`/`bbbbbbbb` product ids) rather than counting
+-- the table. They were unscoped while the database was empty; since
+-- 20260813101702_seed_marketplace_demo_data.sql it also holds a demo catalog,
+-- and a bare count(*) would measure that instead of the policy. The scoping is
+-- on the row set, never on the policy: what is asserted is still "these rows are
+-- visible and those are not".
 
 begin;
 
@@ -190,13 +198,16 @@ values ('eeeeeeee-0000-0000-0000-00000000000a', 'dddddddd-0000-0000-0000-0000000
 select pg_temp.assert_count('anon reads categories', null,
   'select count(*) from public.categories', 7);
 select pg_temp.assert_count('anon reads seller_profiles', null,
-  'select count(*) from public.seller_profiles', 2);
+  $q$select count(*) from public.seller_profiles where store_name like 'Store %'$q$, 2);
 select pg_temp.assert_count('anon reads only active products', null,
-  'select count(*) from public.products', 2);
+  $q$select count(*) from public.products
+     where id::text like 'aaaaaaaa%' or id::text like 'bbbbbbbb%'$q$, 2);
 select pg_temp.assert_count('anon reads images of active products only', null,
-  'select count(*) from public.product_images', 2);
+  $q$select count(*) from public.product_images
+     where product_id::text like 'aaaaaaaa%' or product_id::text like 'bbbbbbbb%'$q$, 2);
 select pg_temp.assert_count('anon reads inventory of active products only', null,
-  'select count(*) from public.inventory', 2);
+  $q$select count(*) from public.inventory
+     where product_id::text like 'aaaaaaaa%' or product_id::text like 'bbbbbbbb%'$q$, 2);
 select pg_temp.assert_count('anon blocked from profiles', null,
   'select count(*) from public.profiles', 0);
 select pg_temp.assert_count('anon blocked from carts', null,
@@ -254,7 +265,8 @@ select pg_temp.assert_denied('buyer A cannot advance own order status', pg_temp.
 select pg_temp.assert_count('seller A sees own inactive listing', pg_temp.jwt('33333333-3333-3333-3333-333333333333'),
   $q$select count(*) from public.products where is_active = false$q$, 1);
 select pg_temp.assert_count('seller A sees own 2 + B active 1', pg_temp.jwt('33333333-3333-3333-3333-333333333333'),
-  'select count(*) from public.products', 3);
+  $q$select count(*) from public.products
+     where id::text like 'aaaaaaaa%' or id::text like 'bbbbbbbb%'$q$, 3);
 select pg_temp.assert_count('seller A sees own order only', pg_temp.jwt('33333333-3333-3333-3333-333333333333'),
   'select count(*) from public.orders', 1);
 select pg_temp.assert_count('seller A sees own order items only', pg_temp.jwt('33333333-3333-3333-3333-333333333333'),
