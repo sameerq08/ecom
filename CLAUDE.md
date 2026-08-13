@@ -18,7 +18,7 @@ Routes that exist: `/`, `/search`, `/products/[id]`, `/cart`, `/checkout`, `/ord
 
 Steps completed: `01-product-browsing-and-detail` (catalog), `02-order-cart-and-checkout` (cart, checkout, orders, seller dashboard), `03-supabase-schema-and-rls` (11 tables, email/password auth, RLS), `05-supabase-auth-integration` (client, session, auth screens, profile shell). **Step 04 is still outstanding** — it was specced before 05 and originally owned the auth work; see the scope-change note at the top of `.claude/specs/04-supabase-data-layer-swap.md`.
 
-The database is also **populated**: `20260813101702_seed_marketplace_demo_data.sql` transcribes `lib/data/` into it one-for-one — the same 5 sellers, 17 products, images, stock and orders, plus one extra order so all four `order_status` values appear. Six demo accounts back it (`*@demo.market`, shared password in the migration header), `homesafe@demo.market` being the seller `CURRENT_SELLER_ID` stands in for. That mirroring is the point: after the step 04 swap the screens should render identically, so any visual difference is a bug in the swap. Product ids are `uuid_generate_v5` of the seed slug, so the mapping stays mechanical — but the app routes on slugs and `products` has no `slug` column, which step 04 must resolve either way (see the closing section of `.claude/specs/entity-architecture.md`).
+The database is also **populated**: `20260813101702_seed_marketplace_demo_data.sql` transcribes `lib/data/` into it one-for-one — the same 5 sellers, 17 products, images, stock and orders, plus one extra order so all four `order_status` values appear. Six demo accounts back it (`*@demo.market`, shared password in the migration header), `homesafe@demo.market` being the seller `CURRENT_SELLER_ID` stands in for. That mirroring is the point: after the step 04 swap the screens should render identically, so any visual difference is a bug in the swap. A follow-up migration, `20260813101800_backdate_demo_account_created_at.sql`, repairs `profiles.created_at` and `seller_profiles.created_at` from `auth.users.created_at`, because the signup trigger writes only `(user_id, display_name)` and left every storefront reporting a 2026 join year; it is idempotent and scoped to `@demo.market`. Product ids are `uuid_generate_v5` of the seed slug, so the mapping stays mechanical — but the app routes on slugs and `products` has no `slug` column, which step 04 must resolve either way (see the closing section of `.claude/specs/entity-architecture.md`).
 
 Step 04 is the remaining swap: rewrite the `lib/data/` modules against real queries and apply the auth gates to the buyer and seller screens. The client, session helpers and auth screens it originally specced are already built. Two things were deliberately deferred to it, and are decisions rather than gaps: decrementing `inventory.stock_qty` at checkout, and validating `price_at_purchase` against the live price. Both are transactional rather than row-scoped and belong in a database function.
 
@@ -100,7 +100,7 @@ Consequences for writing markup:
 
 ## Components
 
-`components/ui/` holds the primitives (`Button`, `Card`, `Badge`, `Skeleton`, `EmptyState`, `ErrorState`); `components/product|cart|orders|seller/` hold domain components. Compose from these rather than restyling from scratch — `.claude/specs/ui-architecture.md` documents the intended layout of each.
+`components/ui/` holds the primitives (`Button`, `Card`, `Badge`, `Skeleton`, `EmptyState`, `ErrorState`, `Field` — the labelled input the auth forms use, whose `id` prop is required so labels always have a target); `components/product|cart|orders|seller/` hold domain components. Compose from these rather than restyling from scratch — `.claude/specs/ui-architecture.md` documents the intended layout of each.
 
 Loading states use **skeletons shaped like the real content** (`ProductCardSkeleton`), not spinners.
 
@@ -108,7 +108,7 @@ Loading states use **skeletons shaped like the real content** (`ProductCardSkele
 
 - Strict mode; no `any` — use `unknown` plus narrowing.
 - Functional components only.
-- Never hand-write DB types. `lib/types/database.ts` is generated (see "When the backend is added"); `lib/types/ui.ts` holds the separate, temporary presentational view-models.
+- Never hand-write DB types. `lib/types/database.ts` is generated from the live schema and already committed (step 03) — regenerate it, don't edit it (see "When the backend is added"). `lib/types/ui.ts` holds the separate, temporary presentational view-models. Nothing outside `lib/supabase/` imports `database.ts` yet; step 04 is what makes it load-bearing.
 
 ## When the backend is added
 
@@ -129,7 +129,7 @@ A Supabase MCP server is wired up in `.mcp.json` (project `xzurhfeetpwthaswutnc`
 - Data access goes through `lib/supabase/` helpers — no ad hoc `createClient()` calls in components.
 - Never hand-write DB types. Regenerate `lib/types/database.ts` via `mcp__supabase__generate_typescript_types` and commit it unmodified — no header comments, so the next regeneration is a clean overwrite.
 - Client-exposed vars must be `NEXT_PUBLIC_` prefixed and may only ever carry the **anon** key. `SUPABASE_SERVICE_ROLE_KEY` must never take that prefix and must never be reachable from a client component or the browser bundle; it's for trusted server contexts that intentionally bypass RLS.
-- Env vars live in `.env` in this repo (not `.env.local`). `.gitignore` matches `.env*` with a single negation for `!.env.example`, the names-only template — but **`.env.example` was deleted in `36c0837` and does not currently exist**, so there is no checked-in record of which names are required. Step 05 recreates it. A committed secret is a compromised secret: rotate in Supabase first, then scrub history.
+- Env vars live in `.env` in this repo (not `.env.local`). `.gitignore` matches `.env*` with a single negation for `!.env.example`, the names-only template, which step 05 recreated after `36c0837` deleted it — it is checked in and is the record of which names are required. A committed secret is a compromised secret: rotate in Supabase first, then scrub history.
 - Every touched RLS policy must be verified against **both** an authorized and an unauthorized role before the change is called done.
 - Cross-check new/changed entities against `.claude/specs/entity-architecture.md` and update that file if the schema diverges.
 
