@@ -164,3 +164,11 @@ order. `OrderStatusEvent.changed_by_profile_id` makes that attributable.
 Screens: Product Home, Search/Filter, Product Detail, Seller Signal/Profile, Cart, Checkout, Customer Order Status, Seller Dashboard, Product Management, Seller Order Status Updates, Supporting Systems — all covered in `visual-architecture.md`.
 
 Entities: Profile, SellerProfile, Category, Product, ProductImage, Inventory, Cart, CartItem, Order, OrderItem, OrderStatusEvent — all covered above.
+
+## Fields the UI has and the schema does not
+
+Seeding the demo marketplace (`supabase/migrations/20260813101702_seed_marketplace_demo_data.sql`) transcribed `lib/data/` into these tables one-for-one, and three fields of the presentational view-models in `lib/types/ui.ts` had nowhere to land. The schema is unchanged and intentionally so — each is a decision step 04 has to make, not an omission:
+
+- **`SeedProduct.featured`** — drives the homepage rail. A presentation flag rather than a catalog fact, so it stays derived in app code unless the homepage needs seller-controlled merchandising, which v1 does not.
+- **`OrderRecord.orderNumber`** (`#112-9876543`) — `Order` has no `order_number`. Either derive a display number from the order id, or add the column if the number must be stable and human-quotable.
+- **Product slug** — `Product` is keyed by uuid, but `/products/[id]` currently routes on slugs like `premium-noise-cancelling-headphones`. Step 04 either adds a unique `slug` column or moves the route to uuids. The seed derives each product's uuid deterministically from its slug (`uuid_generate_v5`), so either path stays mechanical.
