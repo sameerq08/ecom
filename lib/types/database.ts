@@ -286,6 +286,7 @@ export type Database = {
           price: number
           rating: number
           seller_profile_id: string
+          slug: string
         }
         Insert: {
           category_id: string
@@ -297,6 +298,7 @@ export type Database = {
           price: number
           rating?: number
           seller_profile_id: string
+          slug: string
         }
         Update: {
           category_id?: string
@@ -308,6 +310,7 @@ export type Database = {
           price?: number
           rating?: number
           seller_profile_id?: string
+          slug?: string
         }
         Relationships: [
           {

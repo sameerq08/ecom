@@ -1,375 +1,207 @@
-import { getCategoryBySlug } from "@/lib/data/categories";
+import { createClient } from "@/lib/supabase/server";
 import type {
   Product,
   ProductDetail,
   ProductFilters,
-  SellerListingRow,
   SellerSignal,
 } from "@/lib/types/ui";
 
 /**
- * Local seed catalog for the static browsing screens.
+ * The public catalog, read from Postgres.
  *
- * TEMPORARY: this module is the single data-access seam for the catalog. Every
- * screen reads through the exported helpers, never the arrays, so swapping in
- * Supabase queries later touches only this file.
+ * This is the data-access seam for browsing: screens call the helpers below and
+ * never build a query themselves. Every read here is public and runs as `anon`
+ * under `products_select_visible`, so `is_active = false` rows are filtered out
+ * by RLS rather than by anything in this file — the seller's own view of their
+ * inactive listings is a different policy and a different screen.
+ *
+ * `Product.id` carries the product **slug**, not the uuid. The routes are
+ * `/products/<slug>`, and the seed cart and seed orders in `seed-catalog.ts`
+ * still key on slugs; the uuid stays behind this seam.
+ *
+ * Errors throw. A failed query must reach `app/error.tsx` rather than degrade
+ * into an empty grid, which would render as "no such products" — a broken
+ * database is not an empty catalog.
  */
 
-/** Listing counts are derived from the catalog below, never stored, so they cannot drift. */
-const SELLERS = {
-  acoustic: { id: "acoustic", storeName: "Acoustic Pro Direct", memberSince: "2019" },
-  displayworks: { id: "displayworks", storeName: "DisplayWorks", memberSince: "2021" },
-  keyforge: { id: "keyforge", storeName: "KeyForge", memberSince: "2022" },
-  homesafe: { id: "homesafe", storeName: "HomeSafe", memberSince: "2020" },
-  northpage: { id: "northpage", storeName: "Northpage Books", memberSince: "2018" },
-} as const satisfies Record<string, Omit<SellerSignal, "listingCount">>;
-
-type SeedProduct = {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  rating: number;
-  images: readonly string[];
-  sellerId: keyof typeof SELLERS;
-  categorySlug: string;
-  stockQty: number;
-  featured: boolean;
-  /** Mirrors `Product.is_active`: false hides the listing from every public read. */
-  active: boolean;
-};
-
-/** The seller whose dashboard `/seller/*` renders, standing in for a session. */
-export const CURRENT_SELLER_ID = "homesafe" satisfies keyof typeof SELLERS;
-
-const SEED: readonly SeedProduct[] = [
-  {
-    id: "premium-noise-cancelling-headphones",
-    name: "Premium Noise Cancelling Wireless Over-Ear Headphones, Black",
-    description:
-      "Forty hours of playback, adaptive noise cancellation, and memory-foam earcups that stay comfortable through a long-haul flight. Folds flat into a hard travel case.",
-    price: 299,
-    rating: 4.5,
-    images: ["/window.svg", "/globe.svg", "/file.svg"],
-    sellerId: "acoustic",
-    categorySlug: "electronics",
-    stockQty: 24,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "curved-ultrawide-gaming-monitor",
-    name: "34-Inch Curved Ultrawide Gaming Monitor, 144Hz",
-    description:
-      "A 3440x1440 curved panel with a 144Hz refresh rate and 1ms response time. Height-adjustable stand, two HDMI inputs, and one DisplayPort.",
-    price: 449.99,
-    rating: 4,
-    images: ["/globe.svg", "/next.svg"],
-    sellerId: "displayworks",
-    categorySlug: "electronics",
-    stockQty: 8,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "mechanical-keyboard-hot-swappable",
-    name: "Mechanical Keyboard with Hot-Swappable Switches",
-    description:
-      "Swap switches without soldering. Gasket-mounted aluminium body, doubleshot PBT keycaps, and per-key backlighting configurable in the browser.",
-    price: 129.5,
-    rating: 4.8,
-    images: ["/file.svg"],
-    sellerId: "keyforge",
-    categorySlug: "electronics",
-    stockQty: 0,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "smart-indoor-security-camera",
-    name: "Smart Home Indoor Security Camera, 1080p HD Video",
-    description:
-      "Full-HD video with night vision and two-way audio. Motion zones and alerts run on-device, with optional local storage on a microSD card.",
-    price: 49.99,
-    rating: 3.5,
-    images: ["/next.svg"],
-    sellerId: "homesafe",
-    categorySlug: "electronics",
-    stockQty: 61,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "pour-over-coffee-kettle",
-    name: "Gooseneck Pour-Over Coffee Kettle, 1L Stainless Steel",
-    description:
-      "A counterbalanced handle and precision spout for a controlled pour. Variable temperature to the degree, with a thirty-minute hold.",
-    price: 79,
-    rating: 4.6,
-    images: ["/vercel.svg", "/window.svg"],
-    sellerId: "homesafe",
-    categorySlug: "home-kitchen",
-    stockQty: 15,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "cast-iron-skillet-12-inch",
-    name: "Pre-Seasoned Cast Iron Skillet, 12 Inch",
-    description:
-      "Foundry-seasoned and ready to use. Moves from hob to oven to grill, and improves with every meal cooked in it.",
-    price: 34.95,
-    rating: 4.7,
-    images: ["/file.svg"],
-    sellerId: "homesafe",
-    categorySlug: "home-kitchen",
-    stockQty: 42,
-    featured: false,
-    active: true,
-  },
-  {
-    id: "linen-blend-oxford-shirt",
-    name: "Linen-Blend Oxford Shirt, Long Sleeve",
-    description:
-      "A breathable linen-cotton weave cut for a relaxed fit. Mother-of-pearl buttons and a single chest pocket.",
-    price: 58,
-    rating: 4.1,
-    images: [],
-    sellerId: "keyforge",
-    categorySlug: "clothing-accessories",
-    stockQty: 30,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "merino-wool-crew-socks",
-    name: "Merino Wool Crew Socks, Three Pack",
-    description:
-      "Temperature-regulating merino with a reinforced heel and toe. Warm in winter, breathable in summer, and machine washable.",
-    price: 24,
-    rating: 4.4,
-    images: ["/globe.svg"],
-    sellerId: "keyforge",
-    categorySlug: "clothing-accessories",
-    stockQty: 0,
-    featured: false,
-    active: true,
-  },
-  {
-    id: "the-pragmatic-shelf-hardback",
-    name: "The Pragmatic Shelf — Collected Essays, Hardback",
-    description:
-      "Twenty-two essays on craft and attention, collected for the first time. Smyth-sewn binding with a ribbon marker.",
-    price: 27.5,
-    rating: 4.9,
-    images: ["/file.svg", "/vercel.svg"],
-    sellerId: "northpage",
-    categorySlug: "books",
-    stockQty: 12,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "field-notes-pocket-atlas",
-    name: "Field Notes Pocket Atlas of Coastal Birds",
-    description:
-      "Two hundred illustrated plates sized for a jacket pocket. Waterproof cover and a quick-reference silhouette index.",
-    price: 18.99,
-    rating: 3.8,
-    images: ["/window.svg"],
-    sellerId: "northpage",
-    categorySlug: "books",
-    stockQty: 5,
-    featured: false,
-    active: true,
-  },
-  {
-    id: "insulated-trail-water-bottle",
-    name: "Insulated Trail Water Bottle, 750ml",
-    description:
-      "Double-walled vacuum insulation keeps drinks cold for a full day. Leakproof lid with an integrated carry loop.",
-    price: 32,
-    rating: 4.3,
-    images: ["/next.svg"],
-    sellerId: "displayworks",
-    categorySlug: "sports-outdoors",
-    stockQty: 88,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "adjustable-resistance-band-set",
-    name: "Adjustable Resistance Band Set with Door Anchor",
-    description:
-      "Five stackable bands from 10 to 50 pounds, with handles, ankle straps, and a door anchor. Packs into the included pouch.",
-    price: 41.25,
-    rating: 4.2,
-    images: ["/vercel.svg"],
-    sellerId: "displayworks",
-    categorySlug: "sports-outdoors",
-    stockQty: 19,
-    featured: false,
-    active: true,
-  },
-  {
-    id: "hardwood-building-blocks",
-    name: "Hardwood Building Blocks, 100 Piece Set",
-    description:
-      "Sanded beech blocks in six shapes, finished with a non-toxic water-based sealant. Stores in a canvas drawstring bag.",
-    price: 45,
-    rating: 4.6,
-    images: ["/globe.svg", "/file.svg", "/next.svg"],
-    sellerId: "northpage",
-    categorySlug: "toys-games",
-    stockQty: 27,
-    featured: true,
-    active: true,
-  },
-  {
-    id: "vitamin-c-daily-serum",
-    name: "Vitamin C Daily Brightening Serum, 30ml",
-    description:
-      "A 15% stabilised vitamin C serum with hyaluronic acid. Fragrance-free, in an amber pump bottle that limits light exposure.",
-    price: 22.4,
-    rating: 3.9,
-    images: ["/window.svg"],
-    sellerId: "acoustic",
-    categorySlug: "beauty-personal-care",
-    stockQty: 53,
-    featured: false,
-    active: true,
-  },
-  {
-    id: "ceramic-dinner-plate-set",
-    name: "Stoneware Dinner Plate Set, Service for Four",
-    description:
-      "Reactive-glazed stoneware fired at high temperature, so no two plates share a pattern. Dishwasher and microwave safe.",
-    price: 68,
-    rating: 4.4,
-    images: ["/vercel.svg"],
-    sellerId: "homesafe",
-    categorySlug: "home-kitchen",
-    stockQty: 21,
-    featured: false,
-    active: true,
-  },
-  {
-    id: "smart-video-doorbell",
-    name: "Smart Video Doorbell with Two-Way Talk",
-    description:
-      "Answer the door from anywhere. Wide-angle 1080p lens, package detection, and wired or battery installation.",
-    price: 89.99,
-    rating: 4.1,
-    images: ["/next.svg", "/window.svg"],
-    sellerId: "homesafe",
-    categorySlug: "electronics",
-    stockQty: 0,
-    featured: false,
-    active: true,
-  },
-  {
-    id: "motion-sensor-night-light",
-    name: "Motion Sensor Night Light, Two Pack",
-    description:
-      "Warm LED strips that wake on movement and fade out after thirty seconds. Magnetic mount, rechargeable over USB-C.",
-    price: 19.5,
-    rating: 3.7,
-    images: ["/globe.svg"],
-    sellerId: "homesafe",
-    categorySlug: "home-kitchen",
-    stockQty: 34,
-    featured: false,
-    active: false,
-  },
+/**
+ * The homepage rail. `featured` is a presentation flag, not a catalog fact, so
+ * per `.claude/specs/entity-architecture.md` it stays in app code instead of
+ * becoming a column. These are the 17-item seed's featured entries, in order.
+ */
+const FEATURED_SLUGS: readonly string[] = [
+  "premium-noise-cancelling-headphones",
+  "curved-ultrawide-gaming-monitor",
+  "mechanical-keyboard-hot-swappable",
+  "smart-indoor-security-camera",
+  "pour-over-coffee-kettle",
+  "linen-blend-oxford-shirt",
+  "the-pragmatic-shelf-hardback",
+  "insulated-trail-water-bottle",
+  "hardwood-building-blocks",
 ];
 
 /**
- * Seed reads are synchronous, so nothing would ever suspend and `loading.tsx`
- * would never paint. A short development-only delay makes the skeleton states
- * observable while building. Production builds resolve immediately.
+ * Columns every card needs, minus the seller embed. `created_at` is selected
+ * but not rendered: it is the ordering key, staggered by the seed in catalog
+ * order.
+ *
+ * The seller embed is appended per query rather than shared, because PostgREST
+ * rejects a select that names the same embedded table twice — the detail view
+ * needs more seller columns than the card, not a second copy of it.
  */
-export async function simulateLatency(): Promise<void> {
-  if (process.env.NODE_ENV !== "development") return;
-  await new Promise((resolve) => setTimeout(resolve, 600));
+const BASE_COLUMNS =
+  "slug, name, price, rating, created_at, product_images (url, sort_order), inventory (stock_qty)";
+
+const CARD_COLUMNS = `${BASE_COLUMNS}, seller_profiles (store_name)`;
+
+const DETAIL_COLUMNS = `${BASE_COLUMNS}, description, categories (slug), seller_profiles (id, store_name, created_at)`;
+
+/** The row shape the select strings above produce. */
+type CardRow = {
+  slug: string;
+  name: string;
+  price: number;
+  rating: number;
+  product_images: { url: string; sort_order: number }[];
+  inventory: { stock_qty: number } | null;
+  seller_profiles: { store_name: string } | null;
+};
+
+type DetailRow = CardRow & {
+  description: string;
+  categories: { slug: string } | null;
+  seller_profiles:
+    | { id: string; store_name: string; created_at: string }
+    | null;
+};
+
+function toImageUrls(row: CardRow): string[] {
+  return [...row.product_images]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((image) => image.url);
 }
 
-function toProduct(seed: SeedProduct): Product {
+function toProduct(row: CardRow): Product {
   return {
-    id: seed.id,
-    name: seed.name,
-    price: seed.price,
-    rating: seed.rating,
-    imageUrl: seed.images[0] ?? null,
-    sellerName: SELLERS[seed.sellerId].storeName,
-    inStock: seed.stockQty > 0,
+    id: row.slug,
+    name: row.name,
+    price: row.price,
+    rating: row.rating,
+    imageUrl: toImageUrls(row)[0] ?? null,
+    sellerName: row.seller_profiles?.store_name ?? "Unknown seller",
+    inStock: (row.inventory?.stock_qty ?? 0) > 0,
   };
-}
-
-function toSellerSignal(sellerId: SeedProduct["sellerId"]): SellerSignal {
-  return {
-    ...SELLERS[sellerId],
-    listingCount: countActiveListings(sellerId),
-  };
-}
-
-function toDetail(seed: SeedProduct): ProductDetail {
-  return {
-    ...toProduct(seed),
-    description: seed.description,
-    images: seed.images,
-    stockQty: seed.stockQty,
-    categorySlug: seed.categorySlug,
-    seller: toSellerSignal(seed.sellerId),
-  };
-}
-
-export async function getFeaturedProducts(): Promise<Product[]> {
-  await simulateLatency();
-  return SEED.filter((seed) => seed.active && seed.featured).map(toProduct);
-}
-
-export async function getProductById(
-  id: string,
-): Promise<ProductDetail | null> {
-  await simulateLatency();
-  const seed = SEED.find((candidate) => candidate.active && candidate.id === id);
-  return seed ? toDetail(seed) : null;
 }
 
 /**
- * Synchronous lookup used only by the other `lib/data/*` modules to hydrate a
- * stored product id into renderable fields. Unlike `getProductById` it skips
- * the latency simulation and ignores `active`, because a cart line or a placed
- * order must still render after its listing is deactivated.
+ * `%` and `_` are LIKE wildcards and `,` `(` `)` are PostgREST's own filter
+ * delimiters, so an unescaped keyword does not just fail to match — it changes
+ * what the filter means. Anything unsafe is stripped before interpolation.
  */
-export function findProduct(id: string): ProductDetail | null {
-  const seed = SEED.find((candidate) => candidate.id === id);
-  return seed ? toDetail(seed) : null;
+function sanitizeKeyword(keyword: string): string {
+  return keyword.replace(/[%_,().*\\]/g, " ").trim();
 }
 
-/** A seller's own listings, including inactive ones — this is the owner's view. */
-export async function getSellerListings(
-  sellerId: string,
-): Promise<SellerListingRow[]> {
-  await simulateLatency();
-  return SEED.filter((seed) => seed.sellerId === sellerId).map((seed) => ({
-    product: toProduct(seed),
-    categoryName: getCategoryBySlug(seed.categorySlug)?.name ?? seed.categorySlug,
-    stockQty: seed.stockQty,
-    active: seed.active,
-  }));
+export async function getFeaturedProducts(): Promise<Product[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(CARD_COLUMNS)
+    .in("slug", FEATURED_SLUGS)
+    .order("created_at");
+
+  if (error) {
+    throw new Error(`Failed to load featured products: ${error.message}`);
+  }
+
+  return (data as unknown as CardRow[]).map(toProduct);
 }
 
-/** Count of a seller's live listings, for the dashboard stat tiles. */
-export function countActiveListings(sellerId: string): number {
-  return SEED.filter((seed) => seed.sellerId === sellerId && seed.active).length;
+/**
+ * One listing by slug, or null when it does not exist or is not publicly
+ * visible. Null is the page's cue to render `notFound()`; an inactive listing
+ * is indistinguishable from a missing one to anyone but its owner, which is
+ * what the select policy already enforces.
+ */
+export async function getProductById(
+  id: string,
+): Promise<ProductDetail | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(DETAIL_COLUMNS)
+    .eq("slug", id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load product "${id}": ${error.message}`);
+  }
+  if (!data) return null;
+
+  const row = data as unknown as DetailRow;
+  const seller = row.seller_profiles;
+
+  return {
+    ...toProduct(row),
+    description: row.description,
+    images: toImageUrls(row),
+    stockQty: row.inventory?.stock_qty ?? 0,
+    categorySlug: row.categories?.slug ?? "",
+    seller: seller
+      ? await toSellerSignal(seller.id, seller.store_name, seller.created_at)
+      : { id: "", storeName: "Unknown seller", memberSince: "—", listingCount: 0 },
+  };
+}
+
+/**
+ * The public seller signal. `listingCount` is a count-only query rather than a
+ * fetched list — the number is all the card renders.
+ */
+async function toSellerSignal(
+  sellerProfileId: string,
+  storeName: string,
+  createdAt: string,
+): Promise<SellerSignal> {
+  const supabase = await createClient();
+
+  // `is_active` is filtered explicitly rather than left to RLS: the policy also
+  // shows a seller their *own* inactive listings, which would make this public
+  // number read higher for the owner than for everyone else.
+  const { count, error } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("seller_profile_id", sellerProfileId)
+    .eq("is_active", true);
+
+  if (error) {
+    throw new Error(`Failed to count listings for ${storeName}: ${error.message}`);
+  }
+
+  return {
+    id: sellerProfileId,
+    storeName,
+    memberSince: new Date(createdAt).getUTCFullYear().toString(),
+    listingCount: count ?? 0,
+  };
 }
 
 /** Store names for the seller filter dropdown, alphabetised. */
 export async function getSellerNames(): Promise<string[]> {
-  return Object.values(SELLERS)
-    .map((seller) => seller.storeName)
-    .sort((a, b) => a.localeCompare(b));
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("seller_profiles")
+    .select("store_name")
+    .order("store_name");
+
+  if (error) {
+    throw new Error(`Failed to load seller names: ${error.message}`);
+  }
+
+  return data.map((seller) => seller.store_name);
 }
 
 type RawSearchParams = Record<string, string | string[] | undefined>;
@@ -406,45 +238,64 @@ export function hasActiveFilters(filters: ProductFilters): boolean {
   );
 }
 
+/**
+ * Every filter is applied in the query, never in JavaScript — filtering a
+ * fetched array would ignore the indexes and quietly break as the catalog
+ * grows.
+ *
+ * The embedded filters need `!inner`: without it PostgREST filters the
+ * *embedded rows* and still returns the parent, so an out-of-stock product
+ * would come back with an empty `inventory` instead of being excluded.
+ */
 export async function searchProducts(
   filters: ProductFilters,
 ): Promise<Product[]> {
-  await simulateLatency();
+  const supabase = await createClient();
 
-  const keyword = filters.q?.trim().toLowerCase();
+  const needsCategoryJoin = Boolean(filters.category);
+  const needsSellerJoin = Boolean(filters.seller);
+  const needsStockJoin = Boolean(filters.inStock);
 
-  return SEED.filter((seed) => {
-    if (!seed.active) {
-      return false;
-    }
-    if (
-      keyword &&
-      !seed.name.toLowerCase().includes(keyword) &&
-      !seed.description.toLowerCase().includes(keyword)
-    ) {
-      return false;
-    }
-    if (filters.category && seed.categorySlug !== filters.category) {
-      return false;
-    }
-    if (filters.minPrice !== undefined && seed.price < filters.minPrice) {
-      return false;
-    }
-    if (filters.maxPrice !== undefined && seed.price > filters.maxPrice) {
-      return false;
-    }
-    if (filters.rating !== undefined && seed.rating < filters.rating) {
-      return false;
-    }
-    if (
-      filters.seller &&
-      SELLERS[seed.sellerId].storeName !== filters.seller
-    ) {
-      return false;
-    }
-    if (filters.inStock && seed.stockQty <= 0) {
-      return false;
-    }
-    return true;
-  }).map(toProduct);
+  const columns = [
+    "slug, name, price, rating, created_at",
+    "product_images (url, sort_order)",
+    `inventory${needsStockJoin ? "!inner" : ""} (stock_qty)`,
+    `seller_profiles${needsSellerJoin ? "!inner" : ""} (store_name)`,
+    needsCategoryJoin ? "categories!inner (slug)" : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  let query = supabase.from("products").select(columns);
+
+  const keyword = filters.q ? sanitizeKeyword(filters.q) : "";
+  if (keyword) {
+    query = query.or(`name.ilike.%${keyword}%,description.ilike.%${keyword}%`);
+  }
+  if (filters.category) {
+    query = query.eq("categories.slug", filters.category);
+  }
+  if (filters.minPrice !== undefined) {
+    query = query.gte("price", filters.minPrice);
+  }
+  if (filters.maxPrice !== undefined) {
+    query = query.lte("price", filters.maxPrice);
+  }
+  if (filters.rating !== undefined) {
+    query = query.gte("rating", filters.rating);
+  }
+  if (filters.seller) {
+    query = query.eq("seller_profiles.store_name", filters.seller);
+  }
+  if (filters.inStock) {
+    query = query.gt("inventory.stock_qty", 0);
+  }
+
+  const { data, error } = await query.order("created_at");
+
+  if (error) {
+    throw new Error(`Product search failed: ${error.message}`);
+  }
+
+  return (data as unknown as CardRow[]).map(toProduct);
 }

@@ -1,5 +1,5 @@
 import { connection } from "next/server";
-import { findProduct, simulateLatency } from "@/lib/data/products";
+import { findProduct, simulateLatency } from "@/lib/data/seed-catalog";
 import type { CartLine, CartTotals } from "@/lib/types/ui";
 
 /**

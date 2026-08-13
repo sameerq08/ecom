@@ -3,7 +3,7 @@ import { CategoryChips } from "@/components/product/CategoryChips";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SearchFilters } from "@/components/product/SearchFilters";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { getCategoryBySlug } from "@/lib/data/categories";
+import { getCategories, getCategoryBySlug } from "@/lib/data/categories";
 import {
   getSellerNames,
   hasActiveFilters,
@@ -12,12 +12,13 @@ import {
 } from "@/lib/data/products";
 import { formatPrice, type ProductFilters } from "@/lib/types/ui";
 
-function describeFilters(filters: ProductFilters): string[] {
+async function describeFilters(filters: ProductFilters): Promise<string[]> {
   const summary: string[] = [];
 
   if (filters.q) summary.push(`“${filters.q}”`);
   if (filters.category) {
-    summary.push(getCategoryBySlug(filters.category)?.name ?? filters.category);
+    const category = await getCategoryBySlug(filters.category);
+    summary.push(category?.name ?? filters.category);
   }
   if (filters.minPrice !== undefined && filters.maxPrice !== undefined) {
     summary.push(
@@ -37,12 +38,13 @@ function describeFilters(filters: ProductFilters): string[] {
 
 export default async function SearchPage(props: PageProps<"/search">) {
   const filters = parseProductFilters(await props.searchParams);
-  const [products, sellers] = await Promise.all([
+  const [products, sellers, categories, active] = await Promise.all([
     searchProducts(filters),
     getSellerNames(),
+    getCategories(),
+    describeFilters(filters),
   ]);
 
-  const active = describeFilters(filters);
   const isFiltered = hasActiveFilters(filters);
 
   return (
@@ -54,7 +56,11 @@ export default async function SearchPage(props: PageProps<"/search">) {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
         <aside>
-          <SearchFilters filters={filters} sellers={sellers} />
+          <SearchFilters
+            filters={filters}
+            sellers={sellers}
+            categories={categories}
+          />
         </aside>
 
         <section className="flex flex-col gap-4">
