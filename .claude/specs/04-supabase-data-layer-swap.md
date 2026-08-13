@@ -10,8 +10,20 @@ The seam was designed for exactly this. Screens call `lib/data/` helpers and nev
 
 Success is defined by sameness. The seed data mirrors `lib/data/` one-for-one, so once the swap lands the screens should render what they render today. Any visual difference is a bug in the swap, not new behavior — which is why this spec asks for a before/after comparison rather than only a green typecheck.
 
+> **Scope change — auth moved to step 05.** This spec was written before
+> `.claude/specs/05-supabase-auth-integration.md` existed and originally owned
+> the whole auth swap. Step 05 has since taken it: the `@supabase/*`
+> dependencies, `lib/supabase/server.ts`, `lib/supabase/session.ts`, `proxy.ts`,
+> the `/signup`, `/signin`, `/signout` and `/account` routes, and the header's
+> auth state are all **built already** and are not this step's work. What
+> remains here is the data swap itself. Sections below that still describe
+> creating auth screens or session helpers are superseded by step 05; where
+> this spec says "add session handling", read "use the session helpers step 05
+> built".
+
 ## Depends on
 
+- **Step 05 (`.claude/specs/05-supabase-auth-integration.md`) — the session this step's queries run as.** `getCurrentProfile()` and `requireProfile()` in `lib/supabase/session.ts` are the seam to extend with a seller-profile lookup when replacing `CURRENT_SELLER_ID`.
 - Step 01 (`.claude/specs/01-product-browsing-and-detail.md`) and step 02 (`.claude/specs/02-order-cart-and-checkout.md`) — the screens and the `lib/data/` seam being rewritten.
 - Step 03 (`.claude/specs/03-supabase-schema-and-rls.md`) — the eleven tables, the signup trigger, and the policies this step's queries run under.
 - The seed commit (`supabase/migrations/20260813101702_seed_marketplace_demo_data.sql` and `20260813101800_backdate_demo_account_created_at.sql`) — the rows the rewritten helpers read, and the six `*@demo.market` accounts used to exercise the signed-in paths. **Note this branch was cut from `claude/feature/seed-marketplace-demo-data`, not from `main`, because that work is not yet merged.**
@@ -22,11 +34,7 @@ Success is defined by sameness. The seed data mirrors `lib/data/` one-for-one, s
 
 Existing routes keep their paths and their rendering. What changes is that reads hit Postgres and the buyer-scoped ones now require a session.
 
-New:
-
-- `GET|POST /signin` — email/password sign-in — public
-- `GET|POST /signup` — account creation, buyer role by default — public
-- `POST /signout` — ends the session — logged-in
+New: none. `/signin`, `/signup`, `/signout` and `/account` were built in step 05.
 
 Access levels for existing routes, per the Auth Requirement column in `.claude/specs/visual-architecture.md`:
 
@@ -36,7 +44,7 @@ Access levels for existing routes, per the Auth Requirement column in `.claude/s
 
 `/sellers/[id]`, the public seller profile, remains the one screen in `.claude/specs/visual-architecture.md` never built. It is **out of scope here** — this step is the data swap, not new screens — and should be its own step.
 
-`/signin` and `/signup` are a divergence from `.claude/specs/visual-architecture.md`, which models auth as a supporting system with no routes of its own. Add both to that document's screen table as part of this step.
+The auth routes are already recorded in `.claude/specs/visual-architecture.md`, added by step 05.
 
 ## Database changes
 
@@ -78,19 +86,13 @@ Every other component under `components/` should be untouched. Needing to edit o
 
 ## Files to create
 
-- `lib/supabase/server.ts` — the server client for Server Components and Server Actions, reading and writing session cookies
-- `lib/supabase/client.ts` — the browser client. Only needed if something client-side calls Supabase; nothing in the repo is a client component except `app/error.tsx`, so this may be unnecessary — do not add it speculatively.
-- `lib/supabase/session.ts` — the helpers screens use to get the current profile and seller profile, replacing `CURRENT_SELLER_ID`
-- `proxy.ts` — session refresh on every request. **In Next.js 16 `middleware.ts` is renamed `proxy.ts`** with a `nodejs` runtime that cannot be configured, and the exported function is `proxy`, not `middleware`; Supabase's published guides still say middleware. The Next docs are explicit that proxy is for optimistic checks only and is not a session-management or authorization solution — the real gate belongs in the data layer, not here.
-- `app/signin/`, `app/signup/`, `app/signout/` — pages and actions listed above
 - `supabase/migrations/<version>_<name>.sql` — one per change in "Database changes"
+
+`lib/supabase/server.ts`, `lib/supabase/session.ts` and `proxy.ts` already exist (step 05) — extend them, do not recreate them. `lib/supabase/client.ts` was deliberately not created: nothing in the repo is a client component except `app/error.tsx`. Do not add it speculatively.
 
 ## New dependencies
 
-- `@supabase/supabase-js`
-- `@supabase/ssr`
-
-Both are runtime dependencies. No test runner is added here; `npm test` remains the `exit 1` stub, and nothing in this step may claim tests pass.
+None. `@supabase/supabase-js` and `@supabase/ssr` were installed in step 05. No test runner is added here; `npm test` remains the `exit 1` stub, and nothing in this step may claim tests pass.
 
 ## Rules for implementation
 
@@ -121,12 +123,12 @@ Parity — run the dev server and compare against the current seed-driven screen
 7. The Linen-Blend Oxford Shirt detail page renders its no-image fallback rather than a broken image.
 8. The three zero-stock products still show as out of stock and cannot be added to the cart.
 
-Auth:
+Auth gating (the auth *mechanism* itself was proven in step 05; what remains is applying it to the existing screens):
 
-9. Signing up creates an `auth.users` row and, via the trigger, exactly one `profiles` row at role `buyer`.
-10. Signing in as `homesafe@demo.market` shows the display name in the header; signing out returns it to a sign-in link.
-11. Visiting `/cart`, `/checkout`, `/orders` or `/orders/[id]` signed out redirects to `/signin`.
-12. A signed-in buyer visiting `/seller` gets a role-denied state, not a crash and not a redirect loop.
+9. ~~Signing up creates an `auth.users` row and one `profiles` row at role `buyer`.~~ — done in step 05.
+10. ~~Signing in as `homesafe@demo.market` shows the display name in the header.~~ — done in step 05.
+11. Visiting `/cart`, `/checkout`, `/orders` or `/orders/[id]` signed out redirects to `/signin`. **Still outstanding** — step 05 deliberately left these ungated while they read the seed layer.
+12. A signed-in buyer visiting `/seller` gets a role-denied state, not a crash and not a redirect loop. **Still outstanding**, same reason.
 
 Buyer flow, signed in as `jane@demo.market`:
 
