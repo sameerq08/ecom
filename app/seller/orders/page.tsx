@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { OrderTable } from "@/components/seller/OrderTable";
+import { SellerAccessDenied } from "@/components/seller/SellerAccessDenied";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getSellerOrderItems } from "@/lib/data/seller";
+import { requireSellerProfile } from "@/lib/supabase/session";
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_STEPS,
@@ -18,9 +20,12 @@ function parseStatus(raw: string | string[] | undefined): OrderStatus | undefine
 export default async function SellerOrdersPage(
   props: PageProps<"/seller/orders">,
 ) {
+  const seller = await requireSellerProfile();
+  if (!seller) return <SellerAccessDenied />;
+
   const searchParams = await props.searchParams;
   const status = parseStatus(searchParams.status);
-  const rows = await getSellerOrderItems(status);
+  const rows = await getSellerOrderItems(seller.sellerProfileId, status);
 
   // Links rather than a JS-driven control, so filtering survives no-JS.
   const filters: { label: string; href: string; active: boolean }[] = [

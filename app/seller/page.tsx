@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { OrderTable } from "@/components/seller/OrderTable";
+import { SellerAccessDenied } from "@/components/seller/SellerAccessDenied";
 import { SellerStatCard } from "@/components/seller/SellerStatCard";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getSellerOrderItems, getSellerStats } from "@/lib/data/seller";
+import { requireSellerProfile } from "@/lib/supabase/session";
 
 export default async function SellerPage() {
+  const seller = await requireSellerProfile();
+  if (!seller) return <SellerAccessDenied />;
+
   const [stats, orderItems] = await Promise.all([
-    getSellerStats(),
-    getSellerOrderItems(),
+    getSellerStats(seller.sellerProfileId),
+    getSellerOrderItems(seller.sellerProfileId),
   ]);
 
   const recent = orderItems.slice(0, 5);
