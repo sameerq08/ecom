@@ -188,6 +188,32 @@ async function toSellerSignal(
   };
 }
 
+/**
+ * Resolves a slug to the product's database id and current stock. The uuid
+ * otherwise stays behind this seam — `Product.id` is always the slug — but
+ * the cart's `cart_items.product_id` foreign key needs the real id, so this
+ * is the one deliberate exception. Null for a missing or inactive slug, same
+ * visibility as `getProductById`.
+ */
+export async function getProductRef(
+  slug: string,
+): Promise<{ id: string; stockQty: number } | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, inventory (stock_qty)")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to resolve product "${slug}": ${error.message}`);
+  }
+  if (!data) return null;
+
+  return { id: data.id, stockQty: data.inventory?.stock_qty ?? 0 };
+}
+
 /** Store names for the seller filter dropdown, alphabetised. */
 export async function getSellerNames(): Promise<string[]> {
   const supabase = await createClient();

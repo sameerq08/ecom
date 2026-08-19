@@ -2,10 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { removeLine, setLineQuantity } from "@/lib/data/cart";
+import { requireProfile } from "@/lib/supabase/session";
 
 /**
  * A Server Action is a public POST endpoint, so every field is untrusted and
  * gets validated here rather than relying on the form that renders it.
+ * `requireProfile()` redirects a signed-out submission to `/signin` before
+ * either mutator runs — RLS would also reject it, but this avoids a wasted
+ * round trip and gives a signed-out visitor somewhere to land.
  *
  * `revalidatePath("/", "layout")` refreshes the root layout as well as the
  * page, which is what keeps the header's cart badge in step with the lines.
@@ -18,6 +22,8 @@ function readString(formData: FormData, key: string): string | null {
 }
 
 export async function updateQuantity(formData: FormData): Promise<void> {
+  await requireProfile();
+
   const lineId = readString(formData, "lineId");
   const raw = readString(formData, "quantity");
   if (!lineId || !raw) return;
@@ -26,14 +32,16 @@ export async function updateQuantity(formData: FormData): Promise<void> {
   if (!Number.isInteger(quantity)) return;
 
   // `setLineQuantity` clamps to [1, stock]; this only rejects unparseable input.
-  setLineQuantity(lineId, quantity);
+  await setLineQuantity(lineId, quantity);
   revalidatePath("/", "layout");
 }
 
 export async function removeFromCart(formData: FormData): Promise<void> {
+  await requireProfile();
+
   const lineId = readString(formData, "lineId");
   if (!lineId) return;
 
-  removeLine(lineId);
+  await removeLine(lineId);
   revalidatePath("/", "layout");
 }

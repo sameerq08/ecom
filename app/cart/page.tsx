@@ -4,9 +4,13 @@ import { CartSummary } from "@/components/cart/CartSummary";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getCart, summarizeCart } from "@/lib/data/cart";
+import { requireProfile } from "@/lib/supabase/session";
 import { formatPrice } from "@/lib/types/ui";
 
 export default async function CartPage() {
+  // Redirects to /signin when signed out. It throws, so no cart content can
+  // render first.
+  await requireProfile();
   const lines = await getCart();
   const totals = summarizeCart(lines);
 

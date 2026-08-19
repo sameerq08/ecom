@@ -225,7 +225,7 @@ export async function createOrderFromCart(): Promise<string | null> {
     ...ORDERS,
   ];
 
-  clearCart();
+  await clearCart();
   return id;
 }
 
