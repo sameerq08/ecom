@@ -390,7 +390,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      checkout_cart: { Args: { p_shipping_address: string }; Returns: string }
     }
     Enums: {
       order_status: "pending" | "confirmed" | "shipped" | "delivered"
