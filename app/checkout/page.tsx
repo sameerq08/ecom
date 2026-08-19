@@ -8,8 +8,12 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getCart, summarizeCart } from "@/lib/data/cart";
 import { getCheckoutAddress } from "@/lib/data/orders";
+import { requireProfile } from "@/lib/supabase/session";
 
 export default async function CheckoutPage() {
+  // Redirects to /signin when signed out. It throws, so no checkout content
+  // can render first.
+  await requireProfile();
   const lines = await getCart();
   const totals = summarizeCart(lines);
   const address = getCheckoutAddress();

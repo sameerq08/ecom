@@ -2,8 +2,12 @@ import Link from "next/link";
 import { OrderSummaryCard } from "@/components/orders/OrderSummaryCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getOrders } from "@/lib/data/orders";
+import { requireProfile } from "@/lib/supabase/session";
 
 export default async function OrdersPage() {
+  // Redirects to /signin when signed out. It throws, so no order history can
+  // render first.
+  await requireProfile();
   const orders = await getOrders();
 
   return (

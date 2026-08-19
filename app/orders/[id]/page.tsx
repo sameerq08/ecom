@@ -6,11 +6,15 @@ import { OrderStatusTimeline } from "@/components/orders/OrderStatusTimeline";
 import { ShippingAddressCard } from "@/components/checkout/ShippingAddressCard";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { getOrderById } from "@/lib/data/orders";
+import { requireProfile } from "@/lib/supabase/session";
 import { ORDER_STATUS_LABELS, formatPrice } from "@/lib/types/ui";
 
 export default async function OrderDetailPage(
   props: PageProps<"/orders/[id]">,
 ) {
+  // Redirects to /signin when signed out. It throws, so no order detail can
+  // render first.
+  await requireProfile();
   const { id } = await props.params;
   const order = await getOrderById(id);
 
