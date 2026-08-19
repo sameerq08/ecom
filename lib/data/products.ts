@@ -15,9 +15,8 @@ import type {
  * by RLS rather than by anything in this file — the seller's own view of their
  * inactive listings is a different policy and a different screen.
  *
- * `Product.id` carries the product **slug**, not the uuid. The routes are
- * `/products/<slug>`, and the seed cart and seed orders in `seed-catalog.ts`
- * still key on slugs; the uuid stays behind this seam.
+ * `Product.id` carries the product **slug**, not the uuid, because the
+ * routes are `/products/<slug>`; the uuid stays behind this seam.
  *
  * Errors throw. A failed query must reach `app/error.tsx` rather than degrade
  * into an empty grid, which would render as "no such products" — a broken

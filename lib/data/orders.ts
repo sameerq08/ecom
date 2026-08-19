@@ -9,9 +9,9 @@ import {
 } from "@/lib/types/ui";
 
 /**
- * Placed orders.
+ * Placed orders — buyer-facing reads, the checkout write, and the
+ * seller-facing status advance.
  *
- * LIVE (this file, below): the buyer-facing reads and the checkout write.
  * `getOrders`, `getOrderById`, and `getCheckoutAddress` read `orders` /
  * `order_items`, scoped by the owner-or-order-seller RLS from step 03
  * (`orders_select_participant`). `createOrderFromCart` is a single call to
@@ -24,18 +24,12 @@ import {
  * there is what keeps two concurrent checkouts on the last unit from
  * overselling it.
  *
- * SEED (bottom of this file, unchanged): `listOrderRecords` and
- * `advanceOrderStatus` still read and write the module-level `ORDERS` array.
- * They serve only `lib/data/seller.ts` / `/seller/orders`, which still key
- * off the seed `CURRENT_SELLER_ID` rather than a real session — migrating
- * them requires the seller auth gate at the same time (RLS requires the
- * caller to actually be the seller), which is separate, tracked work. A
- * **known, temporary consequence** follows directly: an order placed through
- * the real checkout flow below will not appear in `/seller/orders`, because
- * that screen still reads this frozen seed array. This is not a bug to
- * chase — it is the same kind of deliberate seam CLAUDE.md already
- * documents for `CURRENT_SELLER_ID` itself, and it closes when the seller
- * side migrates next.
+ * `advanceOrderStatus` is the seller-facing write, used by
+ * `lib/data/seller.ts` / `/seller/orders`. Unlike checkout it needs no
+ * privileged function: a seller's own session already has direct RLS grants
+ * for both statements it performs — `orders_update_status_by_seller` (plus
+ * the `update (status)` column grant) and `order_status_events_insert_
+ * participant` — so a plain two-step authenticated write is sufficient.
  */
 
 const BUYER_ADDRESS: readonly string[] = [
@@ -45,7 +39,8 @@ const BUYER_ADDRESS: readonly string[] = [
   "Portland, OR 97209",
 ];
 
-function formatDate(iso: string): string {
+/** Shared with `lib/data/seller.ts`, which formats the same `orders.created_at`. */
+export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
@@ -53,8 +48,11 @@ function formatDate(iso: string): string {
   });
 }
 
-/** No `order_number` column exists (see `.claude/specs/entity-architecture.md`); derived, not stored. */
-function orderNumberFor(id: string): string {
+/**
+ * No `order_number` column exists (see `.claude/specs/entity-architecture.md`);
+ * derived, not stored. Shared with `lib/data/seller.ts`.
+ */
+export function orderNumberFor(id: string): string {
   return `#${id.slice(0, 8).toUpperCase()}`;
 }
 
@@ -229,111 +227,54 @@ export async function createOrderFromCart(): Promise<string | null> {
   return data;
 }
 
-// ---------------------------------------------------------------------------
-// SEED — serves lib/data/seller.ts / `/seller/orders` only. See the module
-// comment above for why this half is not migrated in this step.
+/**
+ * Moves one order one step along `pending → confirmed → shipped →
+ * delivered`, attributed to `changedByProfileId` (the caller's own
+ * `profiles.id`, never someone else's). No-op, not an error, when the order
+ * doesn't exist, is already `delivered`, or the caller isn't a seller on it
+ * — the last case is enforced by RLS: the update below matches zero rows
+ * rather than raising, since `orders_update_status_by_seller` silently
+ * denies a non-participant seller rather than throwing.
+ */
+export async function advanceOrderStatus(
+  changedByProfileId: string,
+  orderId: string,
+): Promise<void> {
+  const supabase = await createClient();
 
-type OrderItemRecord = {
-  id: string;
-  productId: string;
-  quantity: number;
-  /** Snapshot: the catalog price may move afterwards, this must not. */
-  priceAtPurchase: number;
-  sellerId: string;
-};
+  const { data: order, error: fetchError } = await supabase
+    .from("orders")
+    .select("status")
+    .eq("id", orderId)
+    .maybeSingle();
 
-type OrderRecord = {
-  id: string;
-  orderNumber: string;
-  placedAt: string;
-  customerName: string;
-  shippingAddress: readonly string[];
-  status: OrderStatus;
-  items: OrderItemRecord[];
-};
+  if (fetchError) {
+    throw new Error(`Failed to load order "${orderId}": ${fetchError.message}`);
+  }
+  if (!order) return;
 
-const ORDERS: OrderRecord[] = [
-  {
-    id: "o-1003",
-    orderNumber: "#112-9876543",
-    placedAt: "May 15, 2026",
-    customerName: "Jane Doe",
-    shippingAddress: BUYER_ADDRESS,
-    status: "pending",
-    // Two sellers on one order — the seller queue must show only its own line.
-    items: [
-      {
-        id: "i-1",
-        productId: "smart-indoor-security-camera",
-        quantity: 1,
-        priceAtPurchase: 49.99,
-        sellerId: "homesafe",
-      },
-      {
-        id: "i-2",
-        productId: "premium-noise-cancelling-headphones",
-        quantity: 1,
-        priceAtPurchase: 299,
-        sellerId: "acoustic",
-      },
-    ],
-  },
-  {
-    id: "o-1002",
-    orderNumber: "#112-4471190",
-    placedAt: "May 2, 2026",
-    customerName: "Jane Doe",
-    shippingAddress: BUYER_ADDRESS,
-    status: "shipped",
-    items: [
-      {
-        id: "i-3",
-        productId: "cast-iron-skillet-12-inch",
-        quantity: 2,
-        priceAtPurchase: 34.95,
-        sellerId: "homesafe",
-      },
-    ],
-  },
-  {
-    id: "o-1001",
-    orderNumber: "#112-3320087",
-    placedAt: "April 18, 2026",
-    customerName: "Jane Doe",
-    shippingAddress: BUYER_ADDRESS,
-    status: "delivered",
-    items: [
-      {
-        id: "i-4",
-        productId: "the-pragmatic-shelf-hardback",
-        quantity: 1,
-        priceAtPurchase: 27.5,
-        sellerId: "northpage",
-      },
-      {
-        id: "i-5",
-        productId: "pour-over-coffee-kettle",
-        quantity: 1,
-        priceAtPurchase: 79,
-        sellerId: "homesafe",
-      },
-    ],
-  },
-];
+  const next = ORDER_STATUS_STEPS[ORDER_STATUS_STEPS.indexOf(order.status) + 1];
+  if (!next) return;
 
-/** Internal read for the seller queue, which needs item-level detail. */
-export function listOrderRecords(): readonly OrderRecord[] {
-  return ORDERS;
-}
+  const { data: updated, error: updateError } = await supabase
+    .from("orders")
+    .update({ status: next })
+    .eq("id", orderId)
+    .select("id")
+    .maybeSingle();
 
-/** Moves one step along `pending → confirmed → shipped → delivered`. Terminal at delivered. */
-export function advanceOrderStatus(orderId: string): void {
-  const record = ORDERS.find((order) => order.id === orderId);
-  if (!record) return;
+  if (updateError) {
+    throw new Error(`Failed to advance order "${orderId}": ${updateError.message}`);
+  }
+  if (!updated) return;
 
-  const currentIndex = ORDER_STATUS_STEPS.indexOf(record.status);
-  const next = ORDER_STATUS_STEPS[currentIndex + 1];
-  if (next) {
-    record.status = next;
+  const { error: insertError } = await supabase.from("order_status_events").insert({
+    order_id: orderId,
+    status: next,
+    changed_by_profile_id: changedByProfileId,
+  });
+
+  if (insertError) {
+    throw new Error(`Failed to record status event for "${orderId}": ${insertError.message}`);
   }
 }

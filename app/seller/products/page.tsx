@@ -1,11 +1,19 @@
 import Link from "next/link";
 import { ProductTable } from "@/components/seller/ProductTable";
+import { SellerAccessDenied } from "@/components/seller/SellerAccessDenied";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getSellerListings } from "@/lib/data/seller";
+import { requireSellerProfile } from "@/lib/supabase/session";
 
 export default async function SellerProductsPage() {
-  const listings = await getSellerListings();
+  const seller = await requireSellerProfile();
+  if (!seller) return <SellerAccessDenied />;
+
+  const listings = await getSellerListings(
+    seller.sellerProfileId,
+    seller.storeName,
+  );
 
   return (
     <div className="flex flex-col gap-6">

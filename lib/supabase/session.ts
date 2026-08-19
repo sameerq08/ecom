@@ -5,13 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * The session seam. Screens ask these helpers who the visitor is; they never
  * reach for a Supabase client themselves.
- *
- * Step 05 introduces auth *beside* the seed layer in `lib/data/`, which still
- * drives every catalog and commerce screen. So nothing here is wired into
- * product, cart, order or seller reads yet — `CURRENT_SELLER_ID` remains the
- * seller identity those screens use. Step 04 replaces it by extending this
- * module with a seller-profile lookup; the shape below is meant to make that
- * addition purely additive.
  */
 
 /** `profiles.role` is a text column with a check constraint, not an enum. */
@@ -85,4 +78,43 @@ export async function requireProfile(): Promise<CurrentProfile> {
   const profile = await getCurrentProfile();
   if (!profile) redirect("/signin");
   return profile;
+}
+
+export type SellerContext = CurrentProfile & {
+  sellerProfileId: string;
+  storeName: string;
+};
+
+/**
+ * The signed-in seller's context, or null when signed in as a buyer (or a
+ * seller-role profile with no `seller_profiles` row, which should not
+ * happen but is handled the same way rather than crashing). Signed-out
+ * visitors are redirected to `/signin` by the `requireProfile()` call below,
+ * same as every other gated route.
+ *
+ * Callers get `null` for "not a seller" so the page can render a role-denied
+ * state instead of a redirect loop — a buyer visiting `/seller/*` has done
+ * nothing wrong, they're just in the wrong place.
+ */
+export async function requireSellerProfile(): Promise<SellerContext | null> {
+  const profile = await requireProfile();
+  if (profile.role !== "seller") return null;
+
+  const supabase = await createClient();
+  const { data: seller, error } = await supabase
+    .from("seller_profiles")
+    .select("id, store_name")
+    .eq("profile_id", profile.profileId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load seller profile: ${error.message}`);
+  }
+  if (!seller) return null;
+
+  return {
+    ...profile,
+    sellerProfileId: seller.id,
+    storeName: seller.store_name,
+  };
 }

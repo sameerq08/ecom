@@ -11,11 +11,14 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
-const navLinks = [
+const buyerNavLinks = [
   { href: "/", label: "Shop" },
   { href: "/search", label: "Search" },
   { href: "/cart", label: "Cart" },
   { href: "/orders", label: "Orders" },
+];
+
+const sellerNavLinks = [
   { href: "/seller", label: "Seller" },
   { href: "/seller/products", label: "Listings" },
   { href: "/seller/orders", label: "Sales" },
@@ -32,14 +35,18 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // auth actions revalidate at layout scope for the same reason — the nav
   // below now renders the session as well.
   //
-  // The nav links stay ungated: the seller screens still read the seed layer
-  // in `lib/data/`, not the session, so hiding them behind a role would hide
-  // working screens on the strength of an identity they don't consult yet.
-  // Step 04 gates them, when they actually read per-user rows.
+  // The seller links are shown only to a signed-in seller: the routes behind
+  // them are gated on `role = 'seller'`, so surfacing them to a buyer would
+  // just be a link to a role-denied page.
   const [cartCount, profile] = await Promise.all([
     getCartCount(),
     getCurrentProfile(),
   ]);
+
+  const navLinks =
+    profile?.role === "seller"
+      ? [...buyerNavLinks, ...sellerNavLinks]
+      : buyerNavLinks;
 
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>

@@ -80,7 +80,7 @@ flowchart TD
 
 Auth screens were added in step 05 (`.claude/specs/05-supabase-auth-integration.md`). This document originally modelled auth as a supporting system with no routes of its own; sign-up, sign-in and a profile shell need real screens, so they are recorded here.
 
-**The "Auth Requirement" column above states the intended end state, not what is currently enforced.** As of step 05 only `/account` is gated. The Buyer and Seller rows are still ungated in code, because those screens read the local seed layer in `lib/data/` rather than per-user database rows — gating them would lock visitors out of screens that hold no private data. Step 04 (`.claude/specs/04-supabase-data-layer-swap.md`) repoints them at Postgres and applies the gates at the same time.
+**The "Auth Requirement" column above is now fully enforced.** Step 07 gated Cart, step 08 gated Checkout and Customer Order Status, and step 09 (`.claude/specs/09-seller-dashboard-data-swap.md`) gated Seller Dashboard, Product Management and Seller Order Status Updates on a signed-in `role = 'seller'` profile via `requireSellerProfile()` — a signed-in buyer visiting a Seller row gets a role-denied empty state rather than a crash or a redirect loop.
 
 ## Supporting Systems
 
