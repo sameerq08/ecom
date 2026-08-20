@@ -38,6 +38,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# security audit reports (can contain unpatched-vulnerability exploit detail)
+/audit/
+/.claude/skills/security-vulnerability-audit-workspace/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
