@@ -1,0 +1,13 @@
+.agents
+.claude
+audit
+node_modules
+plan
+supabase
+.env
+.env.example
+.gitignore
+.mcp.json
+CLAUDE.md
+SPEC.md
+SpecDrivenIntialTemplate.md
