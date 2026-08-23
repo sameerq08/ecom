@@ -8,7 +8,7 @@ RUN npm ci --only=production
 
 # Copy the rest of your code and build the Next.js site
 COPY . .
-RUN npm run build
+#RUN npm run build
 
 # Expose the default Next.js port
 EXPOSE 3000
